@@ -2,7 +2,7 @@
 %% ── USER PARAMS ──────────────────────────────────────────────────────────
 INIT_SOC      = 75;     % %
 BRAKE_BIAS    = 75;     % % front
-file_path = 'C:\Users\andre\Downloads\S1_4226_20240615_163852-LAP11.csv';
+file_path = 'data/lap_log.csv';   % MoTeC-exported lap log
 
 %% ── VEHICLE / MOTOR CONSTANTS ────────────────────────────────────────────
 KT            = 0.54;           % Nm/A_rms
@@ -99,8 +99,7 @@ for i = 1:N
         rear_brake_req_F = total_brake_F * rear_pct;   % N at tire contact
 
         %% Mechanical rear caliper contribution
-        % FIX #6 (left intact per request, only fixing 1-4): derive rear
-        % pressure correctly from rear brake force share
+        % Derive rear line pressure from the rear brake-force share
         front_brake_F = total_brake_F * (BRAKE_BIAS/100);
         front_pres    = front_brake_F / FRONT_CAL_A;           % Pa
         rear_pres     = (total_brake_F * (1 - BRAKE_BIAS/100)) / REAR_CAL_A;
@@ -109,7 +108,7 @@ for i = 1:N
         axel_T_req    = rear_brake_req_F * (WHEEL_D/2);        % Nm at wheel
         mech_t_rotor  = axel_T_req;
 
-        %% Regen fills deficit (FIX #1: removed undefined regen_deficit_F line)
+        %% Regen fills the remaining rear-axle braking deficit
         regen_deficit_axle = max(0, axel_T_req - mech_t_axle);
         cRegen_T           = (regen_deficit_axle / GEAR) / DTEFF; % Nm motor shaft
 
@@ -148,7 +147,7 @@ for i = 1:N
             cnt_motor_lim = cnt_motor_lim + 1;
         end
 
-        %% CONSTRAINT 6: ABS lockup guard (FIX #2: was max_mech_req_T, now axel_T_req)
+        %% CONSTRAINT 6: ABS lockup guard (cap total rear torque below lockup)
         lockup_rear_T    = axel_T_req * 1.10;
         current_total_T  = mech_t_axle + (cRegen_T * GEAR * DTEFF);
         if current_total_T > lockup_rear_T && cRegen_T > 0
@@ -169,7 +168,7 @@ for i = 1:N
         soc   = min(100, soc + d_soc);
 
     else
-        %% FIX #4: SOC discharge during traction (was entirely missing outside braking)
+        %% SOC discharge during traction (motor draws from pack)
         if v_kph > 0.5 && applied_motor_torque(i) > 0 && omega > 0
             if pack_ocv > 0
                 i_discharge = (omega * applied_motor_torque(i)) / pack_ocv;
@@ -201,7 +200,6 @@ end
 energy_kWh = energy_J / 3.6e6;
 energy_kJ  = energy_J / 1000;
 
-% FIX #3: compute energy_Ah before using it in fprintf
 energy_Ah  = (energy_J / pack_nominal_voltage) / 3600;
 
 final_soc  = soc_vec(end);

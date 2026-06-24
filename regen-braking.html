@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Regen Braking — Andrew Freeman</title>
-  <meta name="description" content="Regenerative braking for Concordia Formula Racing: MATLAB brake-blending simulation and embedded C torque arbitration.">
+  <title>Regen Braking · Andrew Freeman</title>
+  <meta name="description" content="Regenerative braking for Concordia Formula Racing: MATLAB brake blending simulation and embedded C torque arbitration.">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -19,6 +19,7 @@
         <li><a href="cooling-package-design.html">Cooling Package Design</a></li>
         <li><a href="chassis.html">Chassis</a></li>
         <li><a href="firmware.html">Firmware</a></li>
+        <li><a href="embedded-controls.html">Embedded Controls (Mech 471)</a></li>
         <li><a href="aws-deep-racer.html">AWS Deep Racer</a></li>
         <li><a href="wiring-harness.html">Wiring &amp; Harness</a></li>
         <li><a href="regen-braking.html" class="active" aria-current="page">Regen Braking</a></li>
@@ -29,7 +30,7 @@
 
   <main>
     <h1 class="page-title">Regen Braking</h1>
-    <p class="page-subtitle">Brake Blending &amp; Torque Arbitration — Concordia Formula Racing</p>
+    <p class="page-subtitle">Brake Blending &amp; Torque Arbitration · Concordia Formula Racing</p>
 
     <nav class="toc" aria-label="On this page">
       <p class="toc__title">On this page</p>
@@ -42,7 +43,7 @@
     <section class="section" id="matlab-sim">
       <h2>MATLAB Simulation</h2>
       <p>
-        Developed a lap-level brake blending simulation in MATLAB to model regenerative braking on CFR's electric race car, using real telemetry data exported from MoTeC. The sim ingests a logged lap CSV vehicle speed, applied motor torque, and brake line pressure  and runs a time-stepped model that computes how regen torque is blended with mechanical rear braking at each instant. Dynamic weight transfer is calculated each step to determine the true rear brake demand, and regen is then constrained by six layered limits: a minimum speed cutoff, SOC hard cutoff, SOC-proportional taper above 85%, peak charge current, motor shaft torque limit, and an ABS lockup guard tied to dynamic rear axle load. SOC is updated bidirectionally charging during regen events, discharging during traction using a lookup-table OCV model across the 88S4P pack. Outputs include peak regen torque, energy recovered per lap, projected endurance recovery, and perconstraint activation statistics, alongside time-series plots of torque, SOC, and motor RPM synchronized to the lap profile.
+        Developed a lap level brake blending simulation in MATLAB to model regenerative braking on CFR's electric race car, using real telemetry data exported from MoTeC. The sim ingests a logged lap CSV vehicle speed, applied motor torque, and brake line pressure  and runs a time stepped model that computes how regen torque is blended with mechanical rear braking at each instant. Dynamic weight transfer is calculated each step to determine the true rear brake demand, and regen is then constrained by six layered limits: a minimum speed cutoff, SOC hard cutoff, SOC proportional taper above 85%, peak charge current, motor shaft torque limit, and an ABS lockup guard tied to dynamic rear axle load. SOC is updated bidirectionally charging during regen events, discharging during traction using a lookup table OCV model across the 88S4P pack. Outputs include peak regen torque, energy recovered per lap, projected endurance recovery, and per constraint activation statistics, alongside time series plots of torque, SOC, and motor RPM synchronized to the lap profile.
       </p>
       <div class="image-grid image-grid--single">
         <img src="assets/images/regenBraking.png" alt="Regen braking diagram" loading="lazy">
@@ -55,7 +56,7 @@
 %% ── USER PARAMS ──────────────────────────────────────────────────────────
 INIT_SOC      = 75;     % %
 BRAKE_BIAS    = 75;     % % front
-file_path = 'C:\Users\andre\Downloads\S1_4226_20240615_163852-LAP11.csv';
+file_path = 'data/lap_log.csv';   % MoTeC-exported lap log
 
 %% ── VEHICLE / MOTOR CONSTANTS ────────────────────────────────────────────
 KT            = 0.54;           % Nm/A_rms
@@ -152,8 +153,7 @@ for i = 1:N
         rear_brake_req_F = total_brake_F * rear_pct;   % N at tire contact
 
         %% Mechanical rear caliper contribution
-        % FIX #6 (left intact per request, only fixing 1-4): derive rear
-        % pressure correctly from rear brake force share
+        % Derive rear line pressure from the rear brake-force share
         front_brake_F = total_brake_F * (BRAKE_BIAS/100);
         front_pres    = front_brake_F / FRONT_CAL_A;           % Pa
         rear_pres     = (total_brake_F * (1 - BRAKE_BIAS/100)) / REAR_CAL_A;
@@ -162,7 +162,7 @@ for i = 1:N
         axel_T_req    = rear_brake_req_F * (WHEEL_D/2);        % Nm at wheel
         mech_t_rotor  = axel_T_req;
 
-        %% Regen fills deficit (FIX #1: removed undefined regen_deficit_F line)
+        %% Regen fills the remaining rear-axle braking deficit
         regen_deficit_axle = max(0, axel_T_req - mech_t_axle);
         cRegen_T           = (regen_deficit_axle / GEAR) / DTEFF; % Nm motor shaft
 
@@ -201,7 +201,7 @@ for i = 1:N
             cnt_motor_lim = cnt_motor_lim + 1;
         end
 
-        %% CONSTRAINT 6: ABS lockup guard (FIX #2: was max_mech_req_T, now axel_T_req)
+        %% CONSTRAINT 6: ABS lockup guard (cap total rear torque below lockup)
         lockup_rear_T    = axel_T_req * 1.10;
         current_total_T  = mech_t_axle + (cRegen_T * GEAR * DTEFF);
         if current_total_T &gt; lockup_rear_T &amp;&amp; cRegen_T &gt; 0
@@ -222,7 +222,7 @@ for i = 1:N
         soc   = min(100, soc + d_soc);
 
     else
-        %% FIX #4: SOC discharge during traction (was entirely missing outside braking)
+        %% SOC discharge during traction (motor draws from pack)
         if v_kph &gt; 0.5 &amp;&amp; applied_motor_torque(i) &gt; 0 &amp;&amp; omega &gt; 0
             if pack_ocv &gt; 0
                 i_discharge = (omega * applied_motor_torque(i)) / pack_ocv;
@@ -254,7 +254,6 @@ end
 energy_kWh = energy_J / 3.6e6;
 energy_kJ  = energy_J / 1000;
 
-% FIX #3: compute energy_Ah before using it in fprintf
 energy_Ah  = (energy_J / pack_nominal_voltage) / 3600;
 
 final_soc  = soc_vec(end);
@@ -378,7 +377,7 @@ end</code></pre>
     <section class="section" id="embedded-c">
       <h2>Embedded C Implementation</h2>
       <p>
-Implemented the real-time regen torque arbitration function running on CFR's rear vehicle controller (VCREAR) in embedded C. The function reads live longitudinal deceleration and rear brake line pressure over CAN, validates both signals before executing, then computes the optimal regen torque demand each control cycle. Dynamic weight transfer is calculated from the instantaneous deceleration, CG height, and wheelbase to determine how much braking force the rear axle is actually responsible for at that moment. The mechanical contribution of the rear caliper is then subtracted from that demand — converting brake pressure from PSI to pascals, multiplying through caliper area and rotor radius — and the remaining deficit is what regen must fill. The result is referred to the motor shaft through the gear ratio and returned for downstream torque limiting. If either CAN signal is stale or invalid, the function returns zero, ensuring the car fails safe with no unintended regen torque applied.
+Implemented the real time regen torque arbitration function running on CFR's rear vehicle controller (VCREAR) in embedded C. The function reads live longitudinal deceleration and rear brake line pressure over CAN, validates both signals before executing, then computes the optimal regen torque demand each control cycle. Dynamic weight transfer is calculated from the instantaneous deceleration, CG height, and wheelbase to determine how much braking force the rear axle is actually responsible for at that moment. The mechanical contribution of the rear caliper is then subtracted from that demand (converting brake pressure from PSI to pascals, multiplying through caliper area and rotor radius) and the remaining deficit is what regen must fill. The result is referred to the motor shaft through the gear ratio and returned for downstream torque limiting. If either CAN signal is stale or invalid, the function returns zero, ensuring the car fails safe with no unintended regen torque applied.
       </p>
       <pre class="code-block"><code>
         static float32_t evaluate_regenTorque(void)
@@ -413,7 +412,7 @@ Implemented the real-time regen torque arbitration function running on CFR's rea
 
   <!-- ============ CANONICAL FOOTER (copy to every page) ============ -->
   <footer class="site-footer">
-    <p>Andrew Freeman — Project Portfolio</p>
+    <p>Andrew Freeman · Project Portfolio</p>
     <p>andrewfreeman803@gmail.com</p>
     <p><a class="btn btn-email" href="mailto:andrewfreeman803@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/></svg>Email</a></p>
     <p><a class="btn btn-linkedin" href="https://www.linkedin.com/in/andrew-freeman-411437264" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>LinkedIn</a></p>

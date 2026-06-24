@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wiring &amp; Harness — Andrew Freeman</title>
-  <meta name="description" content="High-voltage battery pack wiring architecture for Concordia Formula Racing: routing, safety circuits, and harness manufacturing.">
+  <title>Wiring &amp; Harness · Andrew Freeman</title>
+  <meta name="description" content="High voltage battery pack wiring architecture for Concordia Formula Racing: routing, safety circuits, and harness manufacturing.">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -19,6 +19,7 @@
         <li><a href="cooling-package-design.html">Cooling Package Design</a></li>
         <li><a href="chassis.html">Chassis</a></li>
         <li><a href="firmware.html">Firmware</a></li>
+        <li><a href="embedded-controls.html">Embedded Controls (Mech 471)</a></li>
         <li><a href="aws-deep-racer.html">AWS Deep Racer</a></li>
         <li><a href="wiring-harness.html" class="active" aria-current="page">Wiring &amp; Harness</a></li>
         <li><a href="regen-braking.html">Regen Braking</a></li>
@@ -29,25 +30,28 @@
 
   <main>
     <h1 class="page-title">Wiring &amp; Harness</h1>
-    <p class="page-subtitle">Electrical Design: HV Battery Pack Wiring — Concordia Formula Racing</p>
+    <p class="page-subtitle">Electrical Design: HV Battery Pack Wiring · Concordia Formula Racing</p>
 
     <section class="section">
+      <p>
+        I designed the wiring architecture for the 369.6 V high voltage battery pack,
+        defining every power and signal connection in and out of the pack, then routing,
+        building, and verifying the harness within tight packaging constraints.
+      </p>
       <ul class="bullet-list">
-        <li>Designed the high-voltage (HV) battery pack wiring architecture, ensuring all required power and signal connections</li>
-        <li>Fully routed all pack wiring, optimizing layout for minimal length, reduced resistance, and efficient packaging within tight spatial constraints</li>
-        <li>Implemented optimized wire routing strategies to improve serviceability, reduce electromagnetic interference (EMI), and maintain clear separation between HV and low-voltage systems</li>
-        <li>Ensured full integration and functionality of the safety circuit, including proper interlocks, shutdown paths, and fault detection mechanisms</li>
-        <li>Selected appropriate wire gauges, insulation, and connectors based on current demands, voltage levels, and thermal considerations</li>
-        <li>Verified harness integrity and continuity through systematic testing, ensuring reliability under operational conditions</li>
-        <li>Contributed to overall system safety and reliability by aligning wiring design with best practices and competition regulations</li>
-        <li>Ensured compliance with the FSAE ruleset</li>
+        <li>Routed all pack wiring for minimum length and resistance, and to keep the harness serviceable within the enclosure's spatial constraints</li>
+        <li>Maintained physical separation between high voltage and low voltage runs to reduce coupling/EMI and meet FSAE isolation requirements</li>
+        <li>Integrated the safety circuit (interlocks, the shutdown loop, and fault detection paths) so the tractive system shuts down correctly on any fault</li>
+        <li>Selected wire gauge, insulation rating, and connectors against each circuit's current, voltage, and thermal demands rather than a one size default</li>
+        <li>Verified continuity and isolation of the completed harness through systematic point to point testing before the pack was energized</li>
+        <li>Designed to the FSAE electrical ruleset throughout (HV isolation, conductor sizing, and connector requirements)</li>
       </ul>
     </section>
   </main>
 
   <!-- ============ CANONICAL FOOTER (copy to every page) ============ -->
   <footer class="site-footer">
-    <p>Andrew Freeman — Project Portfolio</p>
+    <p>Andrew Freeman · Project Portfolio</p>
     <p>andrewfreeman803@gmail.com</p>
     <p><a class="btn btn-email" href="mailto:andrewfreeman803@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/></svg>Email</a></p>
     <p><a class="btn btn-linkedin" href="https://www.linkedin.com/in/andrew-freeman-411437264" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>LinkedIn</a></p>
