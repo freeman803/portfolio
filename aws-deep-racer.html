@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AWS Deep Racer — Andrew Freeman</title>
-  <meta name="description" content="AWS DeepRacer reinforcement-learning project: a simulation environment for training autonomous racing models.">
+  <title>AWS Deep Racer · Andrew Freeman</title>
+  <meta name="description" content="AWS DeepRacer reinforcement learning project: a simulation environment for training autonomous racing models.">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -19,6 +19,7 @@
         <li><a href="cooling-package-design.html">Cooling Package Design</a></li>
         <li><a href="chassis.html">Chassis</a></li>
         <li><a href="firmware.html">Firmware</a></li>
+        <li><a href="embedded-controls.html">Embedded Controls (Mech 471)</a></li>
         <li><a href="aws-deep-racer.html" class="active" aria-current="page">AWS Deep Racer</a></li>
         <li><a href="wiring-harness.html">Wiring &amp; Harness</a></li>
         <li><a href="regen-braking.html">Regen Braking</a></li>
@@ -29,22 +30,30 @@
 
   <main>
     <h1 class="page-title">AWS Deep Racer Project</h1>
-    <p class="page-subtitle">End-of-degree project · Vanier College · 2022</p>
+    <p class="page-subtitle">End of degree project · Vanier College · 2022</p>
 
     <section class="section">
+      <div class="stat-row">
+        <div class="stat"><span class="stat__value">67th / 2,325</span><span class="stat__label">Finish in the unranked division</span></div>
+        <div class="stat"><span class="stat__value">Top 3%</span><span class="stat__label">Of all entrants</span></div>
+        <div class="stat"><span class="stat__value">Self hosted</span><span class="stat__label">Linux training server</span></div>
+      </div>
+
       <p>
-        This was an end-of-degree project completed at Vanier College in 2022 for a
-        probability and statistics class.
+        For this end of degree project I trained a reinforcement learning (RL) driving model
+        for the AWS DeepRacer, a 1/18th scale autonomous car that learns to lap a track,
+        and <strong>finished 67th of 2,325 entrants (top 3%)</strong> in the unranked division.
       </p>
       <p>
-        The "Amazon Deep Racer" is a contest that Amazon has been hosting for the last couple years. It involves controlling a Amazon designed race car called "AWS Deep Racer". 
-      It is a 1/18th autonomous race car designed to test Reinforcement Learning algorithms on a physical track. 
-       It requires physical space to run the algorithms and a relatively large initial investment to start trying different types of models. It is also less time efficient since the user must manually reset the racer when it goes off track.  This would discourage many developers. Amazon did not just make the physical racer. It also created a simulation environment which can be used to train various models. This is necessary to train Reinforcement Learning algorithms since when the agents are first learning the are prone to going off track due to their nature. 
-</p>
-<p>
-For this project I had to develop a reinforcement learning algorithm so the robot could find its way around the track. It was difficult to do this since it was my first time do any "self-learning" it was difficult to program it in such a way that the robot can improve overtime and find its best route.  When programming you usually tell the robot exactly what you want it to do which is very different from "self learning" algorithms.   
-For this project I hosted a local Linux server to be able to train the AI algorithm for free. 
-     </p> </p>
+        Unlike conventional programming, where you tell the system exactly what to do, an RL
+        agent improves by trial and error against a reward function. The core engineering
+        problem was designing that reward and the action space so the model would converge on
+        a fast, stable racing line rather than getting stuck or driving erratically. I
+        combined vehicle dynamics constraints with reward function tuning to shape that
+        behaviour, and trained the model on a self hosted Linux server to avoid per hour cloud
+        training costs, which also let me iterate on far more model variants than the budget
+        would otherwise have allowed.
+      </p>
       <p>
         <a class="btn" href="https://htmlpreview.github.io/?https://github.com/freeman803/ESP/blob/main/index.html" target="_blank" rel="noopener">
           View the project report
@@ -55,7 +64,7 @@ For this project I hosted a local Linux server to be able to train the AI algori
 
   <!-- ============ CANONICAL FOOTER (copy to every page) ============ -->
   <footer class="site-footer">
-    <p>Andrew Freeman — Project Portfolio</p>
+    <p>Andrew Freeman · Project Portfolio</p>
     <p>andrewfreeman803@gmail.com</p>
     <p><a class="btn btn-email" href="mailto:andrewfreeman803@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/></svg>Email</a></p>
     <p><a class="btn btn-linkedin" href="https://www.linkedin.com/in/andrew-freeman-411437264" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>LinkedIn</a></p>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pack Design — Andrew Freeman</title>
-  <meta name="description" content="High-voltage battery pack design for Concordia Formula Racing: cell selection, testing, thermal modelling, and fuse design.">
+  <title>Pack Design · Andrew Freeman</title>
+  <meta name="description" content="High voltage battery pack design for Concordia Formula Racing: cell selection, testing, thermal modelling, and fuse design.">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -19,6 +19,7 @@
         <li><a href="cooling-package-design.html">Cooling Package Design</a></li>
         <li><a href="chassis.html">Chassis</a></li>
         <li><a href="firmware.html">Firmware</a></li>
+        <li><a href="embedded-controls.html">Embedded Controls (Mech 471)</a></li>
         <li><a href="aws-deep-racer.html">AWS Deep Racer</a></li>
         <li><a href="wiring-harness.html">Wiring &amp; Harness</a></li>
         <li><a href="regen-braking.html">Regen Braking</a></li>
@@ -29,7 +30,7 @@
 
   <main>
     <h1 class="page-title">Pack Design</h1>
-    <p class="page-subtitle">High Voltage Lead — Concordia Formula Racing</p>
+    <p class="page-subtitle">High Voltage Lead · Concordia Formula Racing</p>
 
     <nav class="toc" aria-label="On this page">
       <p class="toc__title">On this page</p>
@@ -49,11 +50,26 @@
 
     <section class="section" id="overview">
       <h2>Presentation &amp; Overview</h2>
+
+      <div class="stat-row">
+        <div class="stat"><span class="stat__value">369.6 V</span><span class="stat__label">88S4P pack, ~88 kW</span></div>
+        <div class="stat"><span class="stat__value">20 kg</span><span class="stat__label">Lighter than the 2024 pack</span></div>
+        <div class="stat"><span class="stat__value">±3 °C</span><span class="stat__label">Thermal model vs. test data</span></div>
+        <div class="stat"><span class="stat__value">~10 mV</span><span class="stat__label">Cell delta after balancing and cycling</span></div>
+        <div class="stat"><span class="stat__value">±1%</span><span class="stat__label">SOC estimation accuracy</span></div>
+        <div class="stat"><span class="stat__value">&lt;5%</span><span class="stat__label">Pack sizing model error vs. coast down test</span></div>
+      </div>
+
       <a class="download" href="assets/files/formulaconcordia_design_2026_battery.pdf">
         📄 HV Battery Design 2026.pdf
       </a>
       <p>
-       During my time on Concordia formula racing I have worked on 2 battery packs.  During my first year in 2024 I worked on assembling and printing some mounts for boards. In 2026 I fully designed a custom battery pack. With many new features compared to the 2024 pack such as 20kg weight savings. Busbars that slot in when the lid is inserted. Higher energy density modules. Below are some pictures during assembly. 
+        During my time on Concordia Formula Racing I have worked on two battery packs. In my
+        first year (2024) I assembled the pack and printed board mounts. In 2026 I fully
+        designed a custom 369.6 V, 88S4P pack rated for roughly 88 kW. Compared to the 2024
+        pack it is 20 kg lighter, uses higher energy density modules, and integrates busbars
+        that slot into place as the lid is inserted  a design for assembly feature that cuts
+        build time and removes a class of assembly errors. Below are photos from assembly.
       </p>
       <div class="image-grid image-grid--gallery">
         <img src="assets/images/pxl-20260301-000727058.jpg" alt="Battery pack assembly" loading="lazy">
@@ -82,17 +98,17 @@
       <ul class="bullet-list">
         <li>Cell selection
           <ul>
-            <li>Here we went over 50+ cells. Using excel to build different pack configurations and optimizing for our peak voltage limits, target capacity/energy, targer power and lowest internal resistance. </li>
+            <li>We evaluated 50+ cells, using Excel to build candidate pack configurations and optimizing for our peak voltage limits, target capacity/energy, target power, and lowest internal resistance.</li>
           </ul>
         </li>
         <li>HPPC testing
           <ul>
-            <li>Here we preformed Hybrid Pulse Power Characterization this test is where you discharge cells at different soc so we can curve fit our 2 RC model to help get our different resistance values for different states SOC.</li>
+            <li>We performed Hybrid Pulse Power Characterization (HPPC) discharging cells at different states of charge so we can curve fit our 2RC model and extract resistance values across the SOC range.</li>
           </ul>
         </li>
         <li>DCIR testing
           <ul>
-            <li>Used to sort parrallel strings of cells in the pack to obtain a balanced pack this combined with capacity sort yielded a very balanced pack around a 10 mv delta after multiple charge and discharge cycles</li>
+            <li>Used to sort parallel strings of cells for a balanced pack; combined with the capacity sort, this yielded a very balanced pack around a 10 mV delta after multiple charge/discharge cycles.</li>
           </ul>
         </li>
         <li>Characterizing cells using an e-load and oscilloscope</li>
@@ -115,7 +131,7 @@
 I selected NMC chemistry because it offers strong discharge capability without sacrificing too much energy density. The 21700 format was chosen to take advantage of newer tabless designs, where the jelly roll is welded directly to the can. This reduces internal resistance, improves thermal performance, and supports higher discharge rates while increasing overall energy density.
       </p>
       <p>
-From the cells shortlisted, I generated all reasonable series and parallel configuration combinations and filtered them against our system constraints: a maximum motor controller voltage of 400 V, an 80 kW power requirement, minimal voltage sag under load, low mass, and strong high-current discharge behavior (preferably with flatter, more logarithmic discharge curves).Based on that analysis, I narrowed the selection to three candidates: the RS50, BAK 45D, and Molicell P50B. These were the top three cells that met our requirements, and I proceeded to purchase engineering samples for testing and validation.
+From the cells shortlisted, I generated all reasonable series and parallel configuration combinations and filtered them against our system constraints: a maximum motor controller voltage of 400 V, an 80 kW power requirement, minimal voltage sag under load, low mass, and strong high current discharge behavior (preferably with flatter, more logarithmic discharge curves).Based on that analysis, I narrowed the selection to three candidates: the RS50, BAK 45D, and Molicell P50B. These were the top three cells that met our requirements, and I proceeded to purchase engineering samples for testing and validation.
       </p>
       <p>
 ​Once the samples were received, I spent significant time characterizing them. I ran simulated endurance cycles to mimic race conditions and quantified heat generation, DCIR, and usable capacity under realistic load profiles. This allowed me to compare performance beyond just the datasheet specifications and evaluate how each cell behaved in conditions similar to actual competition use.
@@ -131,13 +147,16 @@ From the cells shortlisted, I generated all reasonable series and parallel confi
         🗜 eload_testing.zip
       </a>
       <p>
-I developed this code to test lithium-ion battery cells for cell selection and to generate RC models. The structure is modular to keep it organized and easy to maintain. The low-level module handles all serial communication, including how bytes are packed into command messages and how checksums are calculated and verified. This ensures reliable communication with the electronic load.
+        I authored Python scripts that automated the DCIR and capacity test cycles on the
+        electronic loads, eliminating manual data transcription and <strong>cutting the
+        cell characterization timeline by roughly 40%</strong>. I developed this code to test
+        lithium ion battery cells for cell selection and to generate RC models. The structure is modular to keep it organized and easy to maintain. The low level module handles all serial communication, including how bytes are packed into command messages and how checksums are calculated and verified. This ensures reliable communication with the electronic load.
 On top of that, I created an operating functions layer that contains reusable control functions, such as setting a constant current to a specified amperage. This separates the hardware command logic from the actual test procedures, which keeps the individual test files cleaner and easier to read. For example, the DCIR test file focuses only on the sequence required to measure internal resistance, while calling the operating functions to control the load and read measurements.
-Finally, the high-level file determines which test mode is active, manages data logging, and ensures the electronic load is safely turned off if an error occurs. This structure improves readability, makes debugging easier, and ensures both data integrity and hardware protection during testing
+Finally, the high level file determines which test mode is active, manages data logging, and ensures the electronic load is safely turned off if an error occurs. This structure improves readability, makes debugging easier, and ensures both data integrity and hardware protection during testing
       </p>
       <p>
         I also created a features_definition file to centralize all tunable parameters, such as voltage cutoff, packet length, and battery capacity. This made it easy to adjust test settings without modifying core logic. In that same file, I defined the key global variables used across modules so it was clear which values were shared and tracked throughout the program.
-Within the low-level module, I implemented utility functions for converting integers to byte arrays (e.g., int32 to bytes), calculating checksums, and validating responses from the electronic load to ensure a complete packet was received. I also focused on making the serial communication robust. Since serial links can intermittently drop packets, I added a “force” command option for critical operations—specifically for safely turning off the electronic load at the end of a test. If a full response was not received, the system would continue retrying until confirmation was obtained. For all other commands, a protection mechanism was implemented: if 50 consecutive messages were missed or invalid, the program would stop execution and shut down safely. This balanced reliability with fault detection and hardware protection.
+Within the low level module, I implemented utility functions for converting integers to byte arrays (e.g., int32 to bytes), calculating checksums, and validating responses from the electronic load to ensure a complete packet was received. I also focused on making the serial communication robust. Since serial links can intermittently drop packets, I added a “force” command option for critical operations, specifically for safely turning off the electronic load at the end of a test. If a full response was not received, the system would continue retrying until confirmation was obtained. For all other commands, a protection mechanism was implemented: if 50 consecutive messages were missed or invalid, the program would stop execution and shut down safely. This balanced reliability with fault detection and hardware protection.
       </p>
     </section>
 
@@ -146,7 +165,7 @@ Within the low-level module, I implemented utility functions for converting inte
       <p>
         For my DCIR testing, I followed IEC 61960-2330 so my results would be comparable to manufacturer data. The test procedure was a 0.2C discharge for 10 seconds, followed by a 1C pulse for one second. I calculated ΔR from the change in voltage and current between those two points and used that as the cell’s internal resistance.
 At first, I had issues with voltage accuracy. The electronic load was measuring voltage at its own terminals, and since I was pulling around 5 A, the resistance of the test leads caused a noticeable voltage drop. Because the cell’s internal resistance is already very small, even a small additional drop in the wires significantly affected the results.
-To fix this, I enabled remote voltage sensing so the load measured voltage using separate high-impedance sense wires. I placed these as close as possible to the cell terminals to reduce error. Even then, I couldn’t measure exactly at the true terminal interface, so some small fixture-related voltage drop remained.
+To fix this, I enabled remote voltage sensing so the load measured voltage using separate high impedance sense wires. I placed these as close as possible to the cell terminals to reduce error. Even then, I couldn’t measure exactly at the true terminal interface, so some small fixture related voltage drop remained.
 In the end, I prioritized repeatability over absolute accuracy. I soldered the sense wires to fixed locations on my test setup so every cell was measured the same way. Since the data was mainly used for comparing and sorting cells rather than matching an exact published value, consistent and repeatable measurements were more important than eliminating every millivolt of error.
       </p>
     </section>
@@ -157,10 +176,13 @@ In the end, I prioritized repeatability over absolute accuracy. I soldered the s
         📄 capacity_test.txt
       </a>
       <p>
-       ​To sort the cells by capacity, I first analyzed our race data from the previous season and scaled it to reflect this year’s updated electrical architecture. I also reviewed available data from top-performing teams to understand their average current demands. Based on those comparisons and the performance targets our team set at the beginning of the year, I estimated the required average current per cell. This represented an increase compared to the previous season, but it was within a realistic operating range.
+       ​To sort the cells by capacity, I first analyzed our race data from the previous season and scaled it to reflect this year’s updated electrical architecture. I also reviewed available data from top performing teams to understand their average current demands. Based on those comparisons and the performance targets our team set at the beginning of the year, I estimated the required average current per cell. This represented an increase compared to the previous season, but it was within a realistic operating range.
       </p>
       <p>
-        Once I established a target average current draw, I programmed the electronic load to discharge each cell at that current. Testing at the expected operating load allowed me to capture the effects of Joule heating and voltage sag under realistic conditions. This approach provided a more representative baseline than performing very low-current discharge tests, which can overestimate usable capacity. By testing under load, I was able to better evaluate how each cell would actually perform in the pack and make more informed sorting decisions.
+        Once I established a target average current draw, I programmed the electronic load to discharge each cell at that current. Testing at the expected operating load allowed me to capture the effects of Joule heating and voltage sag under realistic conditions. This approach provided a more representative baseline than performing very low current discharge tests, which can overestimate usable capacity. By testing under load, I was able to better evaluate how each cell would actually perform in the pack and make more informed sorting decisions.
+      </p>
+      <p>
+        To confirm the pack sizing simulations the team built at the start of the year, I validated them against our <strong>coast down testing</strong> comparing the modelled vehicle road load and energy demand to measured data at our targeted endurance speeds. The model agreed to <strong>within 5%</strong>, giving confidence that the average current and energy assumptions used to size the pack were accurate.
       </p>
     </section>
 
@@ -170,17 +192,17 @@ In the end, I prioritized repeatability over absolute accuracy. I soldered the s
         📄 hppc_file.txt
       </a>
       <p>
-Later in the year, I began developing an SOC estimation model, which is still in progress since it has not yet been fully validated. I started by reviewing literature on equivalent circuit modeling to determine whether a 1RC or 2RC model would be more appropriate. There is still some debate on when each model outperforms the other, but I ultimately chose to use a 2RC model for electrical SOC estimation and a simpler 1R model for thermal calculations.
-For thermal modeling, the difference in predicted power dissipation between a 1R and higher-order model is relatively small. Most literature suggests that the cell’s thermal mass behaves like a large capacitor, smoothing out fast electrical dynamics that are neglected in a lower-order model. Given our application and computational constraints, this was a reasonable tradeoff.
+Later in the year I developed an SOC (state of charge) estimation model that now tracks within roughly 2% across almost the entire SOC range; the only notable departure is below 10% SOC, where it underestimates by about 2%. I started by reviewing literature on equivalent circuit modeling to determine whether a 1RC or 2RC model would be more appropriate. There is still some debate on when each model outperforms the other, but I ultimately chose to use a 2RC model for electrical SOC estimation and a simpler 1R model for thermal calculations.
+For thermal modeling, the difference in predicted power dissipation between a 1R and higher order model is relatively small. Most literature suggests that the cell’s thermal mass behaves like a large capacitor, smoothing out fast electrical dynamics that are neglected in a lower order model. Given our application and computational constraints, this was a reasonable tradeoff.
       </p>
       <p>
-        To identify the electrical parameters, I performed HPPC (Hybrid Pulse Power Characterization) testing. The procedure involved applying a 1C discharge pulse for 10 seconds (assuming SOC remains approximately constant over that short duration), followed by a 40-second rest period. I then applied a 0.75C charge pulse for 10 seconds, again assuming negligible SOC change. The voltage response from these pulses was used to curve-fit the parameters of a 2RC equivalent circuit model.
+        To identify the electrical parameters, I performed HPPC (Hybrid Pulse Power Characterization) testing. The procedure involved applying a 1C discharge pulse for 10 seconds (assuming SOC remains approximately constant over that short duration), followed by a 40 second rest period. I then applied a 0.75C charge pulse for 10 seconds, again assuming negligible SOC change. The voltage response from these pulses was used to curve fit the parameters of a 2RC equivalent circuit model.
       </p>
       <p>
         After characterizing one SOC point, I performed a 1C discharge until the cell reached 10% lower SOC than the previous step. I then allowed the cell to rest for approximately one hour to minimize voltage relaxation effects before repeating the pulse sequence.  This process was repeated in 10% SOC increments to capture how internal resistance and time constants vary across the discharge curve.
       </p>
       <p>
-        Ideally, this characterization would also have been repeated across multiple temperatures to capture thermal dependency in the model parameters. However, due to budget and equipment constraints within the program, temperature-dependent testing was not feasible at the time. Listed below is the source where we got our standard for HPPC testing.
+        Ideally, this characterization would also have been repeated across multiple temperatures to capture thermal dependency in the model parameters. However, due to budget and equipment constraints within the program, temperature dependent testing was not feasible at the time. Listed below is the source where we got our standard for HPPC testing.
       </p>
       <a class="download" href="assets/files/hppc_testing_standard.pdf">
         📄 HPPC testing standard (reference)
@@ -190,26 +212,30 @@ For thermal modeling, the difference in predicted power dissipation between a 1R
     <section class="section" id="thermal">
       <h2>Thermal Model</h2>
       <p>
-Here are some preliminary results from my ANSYS thermal simulations. The three images at the top show airflow patterns and highlight a segment of the pack that was running significantly hotter than the rest. The goal of this study was to understand how fan direction influenced airflow distribution and to estimate how much heat each cell could realistically dissipate under load.
+        Built on the previous year's validated baseline, this coupled RC electrical and
+        conjugate heat transfer model (MATLAB + ANSYS Fluent) predicts pack temperature to
+        within <strong>±3 °C across endurance simulation runs</strong>, which let us cut
+        physical test iterations. The three images below show airflow patterns and highlight a segment of the pack that was running significantly hotter than the rest. The goal of this study was to understand how fan direction influenced airflow distribution and to estimate how much heat each cell could realistically dissipate under load.
 Last year’s design was five cells tall with fans mounted on the top. Due to new packaging constraints, that layout was no longer feasible, and we moved toward a more compact, thermally insulated configuration. Before committing to that smaller package, I ran this simulation to understand the thermal tradeoffs.
 Since material properties such as specific heat and convective heat transfer coefficients are difficult to determine accurately without detailed testing, I reused the same values and heating assumptions from the previous year’s validated model. This allowed me to establish a consistent thermal resistance baseline and make relative comparisons between the two designs.
       </p>
       <p>
 The first image shows that applying the same heating level that previously brought a segment to 60°C (the SAE rule limit) resulted in higher temperatures in the new configuration. This aligned with expectations, as the updated design prioritized packaging density over thermal openness.
 To estimate heat generation, I used results from the RC electrical model and conservatively assumed that 100% of the voltage drop across the RC network and series resistance was dissipated as heat. I neglected the temperature dependence of resistance; however, including it would have favored the analysis, since resistance typically decreases with increasing temperature.
-Using worst-case assumptions, I simulated a load equal to 1.5× our target average current for 1.5× the duration of an endurance race. Even under these conservative conditions, the cells remained below the 60&deg;C limit, which gave confidence that the compact packaging decision was thermally acceptable.
+Using worst case assumptions, I simulated a load equal to 1.5× our target average current for 1.5× the duration of an endurance race. Even under these conservative conditions, the cells remained below the 60&deg;C limit, which gave confidence that the compact packaging decision was thermally acceptable.
       </p>
       <div class="image-grid image-grid--gallery">
-        <img src="assets/images/picture1-orig.png" alt="Ansys thermal simulation — airflow patterns" loading="lazy">
-        <img src="assets/images/picture3-orig.png" alt="Ansys thermal simulation — heat distribution" loading="lazy">
-        <img src="assets/images/picture4-orig.png" alt="Ansys thermal simulation result" loading="lazy">
+        <img src="assets/images/picture1-orig.png" alt="ANSYS Fluent thermal simulation, airflow patterns through the pack" loading="lazy">
+        <img src="assets/images/picture3-orig.png" alt="ANSYS Fluent thermal simulation, cell to cell heat distribution" loading="lazy">
+        <img src="assets/images/picture4-orig.png" alt="ANSYS Fluent thermal simulation, worst case endurance load result" loading="lazy">
       </div>
+      <p class="figure-caption">ANSYS Fluent conjugate heat transfer study: airflow distribution and per cell temperatures under a worst case endurance load (1.5× target current for 1.5× race duration). Cells stay below the 60 °C SAE limit even in the compact package.</p>
     </section>
 
     <section class="section" id="fuse">
       <h2>Fuse Testing</h2>
       <p>
-When beginning the fuse design, several geometric constraints had to be considered—most notably that the fuse width could not exceed the cell width. Initial calculations revealed that the previously used material, nickel-plated steel, was too resistive to meet the updated electrical requirements. As a result, the design was transitioned to pure nickel to achieve the necessary resistance and cross-sectional targets.
+When beginning the fuse design, several geometric constraints had to be considered most notably that the fuse width could not exceed the cell width. Initial calculations revealed that the previously used material, nickel-plated steel, was too resistive to meet the updated electrical requirements. As a result, the design was transitioned to pure nickel to achieve the necessary resistance and cross-sectional targets.
 The fuse sizing was determined by evaluating Joule heating and comparing the dissipated energy to the material’s melting energy. This analysis assumed minimal heat losses due to conduction and convection, which is reasonable given the short timescales involved. The resulting cross-sectional area provided a strong initial estimate for prototyping.
 Experimental validation showed excellent agreement with the model, requiring only a minor adjustment of 0.15 mm to meet the final design criteria and the FSAE ruleset
       </p>
@@ -227,7 +253,7 @@ Experimental validation showed excellent agreement with the model, requiring onl
 
   <!-- ============ CANONICAL FOOTER (copy to every page) ============ -->
   <footer class="site-footer">
-    <p>Andrew Freeman — Project Portfolio</p>
+    <p>Andrew Freeman · Project Portfolio</p>
     <p>andrewfreeman803@gmail.com</p>
     <p><a class="btn btn-email" href="mailto:andrewfreeman803@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/></svg>Email</a></p>
     <p><a class="btn btn-linkedin" href="https://www.linkedin.com/in/andrew-freeman-411437264" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>LinkedIn</a></p>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Embedded Controls · Andrew Freeman</title>
+  <meta name="description" content="Hardware in the Loop RC car controller on Arduino Uno: a custom register level AVR firmware stack, a PID/traction/launch/brake control system, and a multi target PlatformIO build.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="site-title" href="index.html">Project Portfolio <span>· Andrew Freeman</span></a>
+      <button class="nav-toggle" aria-label="Toggle navigation" aria-controls="primary-nav" aria-expanded="false">☰</button>
+      <ul class="nav" id="primary-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="pack-design.html">Pack Design</a></li>
+        <li><a href="cooling-package-design.html">Cooling Package Design</a></li>
+        <li><a href="chassis.html">Chassis</a></li>
+        <li><a href="firmware.html">Firmware</a></li>
+        <li><a href="embedded-controls.html" class="active" aria-current="page">Embedded Controls (Mech 471)</a></li>
+        <li><a href="aws-deep-racer.html">AWS Deep Racer</a></li>
+        <li><a href="wiring-harness.html">Wiring &amp; Harness</a></li>
+        <li><a href="regen-braking.html">Regen Braking</a></li>
+      </ul>
+    </div>
+  </header>
+  <!-- ============ /HEADER ============ -->
+
+  <main>
+    <h1 class="page-title">Embedded Controls</h1>
+    <p class="page-subtitle">Hardware in the Loop RC Car Controller · Arduino Uno (AVR) · MECH471, Concordia University</p>
+
+    <div class="hero-actions">
+      <a class="btn btn-ghost" href="https://github.com/freeman803/MECH471/tree/main/Mech%20471" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 016 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22 0 1.6-.01 2.9-.01 3.29 0 .32.21.7.82.58A12.01 12.01 0 0024 12.5C24 5.87 18.63.5 12 .5z"/></svg>
+        View the code on GitHub
+      </a>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat"><span class="stat__value">50 Hz</span><span class="stat__label">Deterministic control loop</span></div>
+      <div class="stat"><span class="stat__value">Register level</span><span class="stat__label">Custom AVR HAL</span></div>
+      <div class="stat"><span class="stat__value">2 boards</span><span class="stat__label">Controller plus HIL plant, over GPIO</span></div>
+      <div class="stat"><span class="stat__value">1 Mbaud</span><span class="stat__label">CSV telemetry over serial</span></div>
+    </div>
+
+    <nav class="toc" aria-label="On this page">
+      <p class="toc__title">On this page</p>
+      <ul>
+        <li><a href="#overview">System Overview</a></li>
+        <li><a href="#firmware">Low Level Firmware</a></li>
+        <li><a href="#control">Control Strategy</a></li>
+        <li><a href="#build">Build System &amp; Simulation</a></li>
+        <li><a href="#source">Source</a></li>
+      </ul>
+    </nav>
+
+    <section class="section" id="overview">
+      <h2>System Overview</h2>
+      <p>
+        This is a Hardware in the Loop (HIL) control systems project from MECH471 at Concordia.
+        A controller running on an Arduino Uno drives a virtual RC car in real time: a second
+        Arduino runs a vehicle and tyre model as the plant, and the two boards talk over plain
+        GPIO. The controller emits two servo style pulse trains (drive and steering) and reads
+        three analog wheel speed signals back from the plant, closing the loop every cycle.
+      </p>
+      <p>
+        I built the controller side of this system from the registers up: the low level AVR
+        firmware (timers, ADC, digital I/O, and a reusable PID library) and the PlatformIO
+        build system that ties the controller and simulator targets together. The vehicle and
+        tyre simulation that the controller runs against was provided by the course as the
+        plant to control.
+      </p>
+      <p>The controller and plant exchange the following signals:</p>
+      <ul class="bullet-list">
+        <li>u1, drive motor command, sent as a 1000 to 2000 microsecond servo pulse on D7</li>
+        <li>u2, steering command, sent as a servo pulse on D8</li>
+        <li>y1, rear wheel speed, read on analog input A1</li>
+        <li>y2, right front wheel speed, read on A3</li>
+        <li>y3, left front wheel speed, read on A5</li>
+        <li>A shared ground between the two boards</li>
+      </ul>
+    </section>
+
+    <section class="section" id="firmware">
+      <h2>Low Level Firmware (custom AVR HAL)</h2>
+      <p>
+        Rather than lean on the Arduino library, I wrote my own hardware abstraction layer for
+        the ATmega328P so I had direct control over timing and I/O. It is split into small
+        modules: a Timer2 based millisecond clock with a measured loop time step for the
+        controllers, buffered multi channel ADC sampling for the three wheel speed inputs, a
+        thin digital I/O layer, and a reusable PID library.
+      </p>
+      <h3>Timing &amp; servo PWM</h3>
+      <p>
+        The two servo pulses are generated directly from Timer1. A timer overflow starts both
+        pulses and flags the main loop to run, and two output compare interrupts end each pulse
+        at the width that encodes the current command, so pulse timing is handled in hardware
+        and stays jitter free regardless of what the main loop is doing.
+      </p>
+      <pre class="code-block"><code>ISR(TIMER1_OVF_vect) {
+    PORTD |=  BIT(PORTD7);   // D7 HIGH: start u1 pulse (drive motor)
+    PORTB |=  BIT(PORTB0);   // D8 HIGH: start u2 pulse (steering)
+    control_flag = true;     // flag the main loop to run
+}
+
+ISR(TIMER1_COMPA_vect) {
+    PORTD &amp;= ~BIT(PORTD7);   // D7 LOW: end u1 pulse
+}
+
+ISR(TIMER1_COMPB_vect) {
+    PORTB &amp;= ~BIT(PORTB0);   // D8 LOW: end u2 pulse
+}</code></pre>
+      <p>
+        A small mapping function turns a commanded armature voltage into a pulse width,
+        centred on the 1500 microsecond neutral point and clamped to the safe servo range so a
+        bad command can never drive the output out of bounds:
+      </p>
+      <pre class="code-block"><code>uint16_t va_to_pw(float Va) {
+    float pw = (Va / V_BAT) * PW_RANGE + PW_NEUTRAL;
+    if (pw &lt; PW_MIN) pw = PW_MIN;
+    if (pw &gt; PW_MAX) pw = PW_MAX;
+    return (uint16_t)pw;
+}</code></pre>
+
+      <h3>ADC driver (register level)</h3>
+      <p>
+        The wheel speed signals arrive as analog voltages, so I wrote the ADC driver straight
+        against the registers. <code>ADC_INIT()</code> enables the converter and sets the /128
+        prescaler so the ADC clock lands at 125 kHz (16 MHz divided by 128), which keeps it
+        inside the 50 to 200 kHz range the hardware needs for a full 10 bit conversion. It also
+        right adjusts the result and selects AVcc as the reference. A blocking read then selects
+        the channel through the low nibble of ADMUX, starts a conversion, polls until it
+        finishes, reads the 10 bit result, and scales it to volts.
+      </p>
+      <pre class="code-block"><code>void ADC_INIT(void){
+    ADCSRA |= BIT(ADEN);   // enable ADC
+    // prescaler /128: 16 MHz / 128 = 125 kHz ADC clock (within the 50 to 200 kHz spec)
+    ADCSRA |= BIT(ADPS0);
+    ADCSRA |= BIT(ADPS1);
+    ADCSRA |= BIT(ADPS2);
+    ADMUX  &amp;= ~BIT(ADLAR); // right adjust the result
+    ADMUX  |= BIT(REFS0);  // AVcc reference
+    ADMUX  &amp;= ~BIT(REFS1);
+}
+
+float read_analog_ADC(ANALOG_PINS pin){
+    if (pin &gt; 6)
+        return 0.0;                          // reject an invalid channel
+    ADMUX = ((ADMUX &amp; 0xF0) | (uint8_t)pin); // select the channel
+    ADCSRA |= BIT(ADSC);                     // start conversion
+    while (ADCSRA &amp; BIT(ADSC));              // wait until done
+    uint16_t result = ADC;                   // read ADCL then ADCH
+    return result * (5.0/1023.0);            // scale to volts
+}</code></pre>
+
+      <h3>Interrupt driven buffered ADC</h3>
+      <p>
+        Reading three wheel speeds with the blocking call above would stall the control loop, so
+        the running system uses an interrupt driven scanner built on top of that driver. Compile
+        time flags pick which channels are active, and each one gets its own FIFO ring buffer.
+        <code>init_buffer()</code> points the ADC at the first channel, enables the conversion
+        complete interrupt, and starts the first conversion. From then on the ADC free runs: each
+        time a conversion completes, the interrupt pushes the sample into that channel's buffer,
+        advances to the next enabled channel in a round robin, repoints the multiplexer, and
+        kicks off the next conversion. The main loop never waits on the ADC; it just reads a
+        boxcar average out of each buffer, which also smooths the noisy wheel speed signal.
+      </p>
+      <pre class="code-block"><code>// abridged: one case per enabled channel
+ISR(ADC_vect){
+    uint16_t val = ADC;
+    switch (enabled_pins[current_index]){
+        case A_1:
+            LIB_BUFFER_FIFO_INSERT(&amp;USE_Buffer1, val);
+            break;
+        // ... one case per enabled channel ...
+    }
+    current_index++;
+    if (current_index &gt;= NUM_PINS)
+        current_index = 0;
+    uint8_t next_pin = enabled_pins[current_index];
+    ADMUX = ((ADMUX &amp; 0xF0) | next_pin); // point at the next channel
+    ADCSRA |= BIT(ADSC);                  // start its conversion
+}
+
+uint16_t buffer_avg(uint16_t *arr){
+    uint32_t sum = 0;
+    for (int i = 0; i &lt; BufferLength; i++)
+        sum += arr[i];
+    return sum / BufferLength;
+}</code></pre>
+
+      <h3>PID library</h3>
+      <p>
+        The PID library is my own as well, and it handles the details that make a discrete PID
+        behave on real hardware. It uses the actual measured time step each cycle rather than an
+        assumed constant, with a guard against division by zero. It takes the derivative on the
+        measurement instead of the error, so a step change in setpoint does not produce a
+        derivative kick, and it low pass filters that derivative through an alpha term to reject
+        sensor noise. The integrator is clamped between fixed bounds for anti windup, so it
+        cannot run away while the output is saturated.
+      </p>
+      <pre class="code-block"><code>float PID_compute(PID_t *pid, float setpoint, float measurement, struct time_differencePID *time){
+    float error = setpoint - measurement;
+    update_dt(time);
+    float dt = time-&gt;dt / 1000.0f;
+    if (dt &lt;= 0.0f) dt = 1e-6f;                 // guard against divide by zero
+
+    pid-&gt;proportional = pid-&gt;kp * error;
+
+    pid-&gt;integrated_error += error * dt;        // integrate, then clamp for anti windup
+    if (pid-&gt;integrated_error &gt; pid-&gt;integral_max)
+        pid-&gt;integrated_error = pid-&gt;integral_max;
+    else if (pid-&gt;integrated_error &lt; pid-&gt;integral_min)
+        pid-&gt;integrated_error = pid-&gt;integral_min;
+    pid-&gt;integral = pid-&gt;integrated_error * pid-&gt;ki;
+
+    // derivative on the measurement (not the error) avoids derivative kick
+    pid-&gt;derivative = ((measurement - pid-&gt;prev_measurement) / dt) * pid-&gt;kd;
+    pid-&gt;prev_measurement = measurement;
+    // first order low pass filter on the derivative term
+    pid-&gt;derivative = pid-&gt;alpha * pid-&gt;derivative + (1 - pid-&gt;alpha) * pid-&gt;prev_derivative;
+    pid-&gt;prev_derivative = pid-&gt;derivative;
+
+    return (pid-&gt;proportional + pid-&gt;integral + pid-&gt;derivative);
+}</code></pre>
+    </section>
+
+    <section class="section" id="control">
+      <h2>Control Strategy</h2>
+      <p>
+        On top of that firmware, the controller runs four control modes at 50 Hz, arbitrated by
+        a priority stack that picks the right mode for the vehicle state each cycle:
+      </p>
+      <ul class="bullet-list">
+        <li><strong>Cruise / speed control</strong>, a PID loop that holds a target wheel speed</li>
+        <li><strong>Launch control</strong>, an open loop voltage applied from a standstill until the car reaches a speed threshold, which keeps the speed PID from winding up at zero speed before handing over to it</li>
+        <li><strong>Traction control</strong>, which watches the slip ratio between the rear and front wheels and backs off throttle when the rear spins up, and loosens its slip margin while steering</li>
+        <li><strong>Braking control</strong>, a separate loop that manages slip during deceleration</li>
+      </ul>
+      <p>
+        Slip is computed from the front and rear wheel speeds, with a low speed cutoff so noise
+        at a near standstill cannot produce a meaningless ratio, and a saturation so a single
+        bad sample cannot dominate the controller:
+      </p>
+      <pre class="code-block"><code>float compute_slip(float w_front, float w_rear) {
+    const float MIN_FRONT_SPEED = 30.0f;
+
+    if (fabsf(w_front) &lt; MIN_FRONT_SPEED) {
+        return 0.0f;
+    }
+
+    float S = (w_front - w_rear) / fabsf(w_front);
+
+    if (S &gt;  3.0f) S =  3.0f;
+    if (S &lt; -3.0f) S = -3.0f;
+
+    return S;
+}</code></pre>
+      <p>
+        A maneuver sequencer drives the whole thing through a scripted routine of forward and
+        reverse runs, turns, and a donut, which exercises each control mode in turn. Every cycle
+        is logged as CSV over serial at up to 1 Mbaud so the runs can be plotted and the
+        controllers tuned against real traces.
+      </p>
+    </section>
+
+    <section class="section" id="build">
+      <h2>Build System &amp; Simulation</h2>
+      <p>
+        I chose PlatformIO over the Arduino IDE so the project could hold several firmware
+        images in one repository and build them reproducibly from the command line. A single
+        platformio.ini defines four environments that share the same board and framework but
+        compile different sources through build source filters: the controller, and the three
+        plant simulators of increasing fidelity. The same setup runs as a two board simulation
+        in Wokwi, so the full HIL loop can be exercised in the browser without hardware.
+      </p>
+      <pre class="code-block"><code>[platformio]
+default_envs = uno
+
+[env:uno]                       ; controller
+platform = atmelavr
+board = uno
+framework = arduino
+build_src_filter = -&lt;*&gt; +&lt;main.cpp&gt; +&lt;HW/&gt;
+monitor_speed = 1000000
+
+[env:simulator3]                ; provided vehicle + tyre plant
+platform = atmelavr
+board = uno
+framework = arduino
+build_src_filter = -&lt;*&gt; +&lt;simulator/sim3/HIL3prof.cpp&gt;
+monitor_speed = 2000000</code></pre>
+      <p>
+        Switching what gets flashed is then a one line change of environment, and the controller
+        and plant can be uploaded to their two boards independently.
+      </p>
+    </section>
+
+    <section class="section" id="source">
+      <h2>Source</h2>
+      <p>
+        The full project, including the AVR HAL, the PID library, the controller, the
+        PlatformIO configuration, and the Wokwi simulation, is on GitHub.
+      </p>
+      <a class="download" href="https://github.com/freeman803/MECH471/tree/main/Mech%20471" target="_blank" rel="noopener">
+        🔗 github.com/freeman803/MECH471
+      </a>
+    </section>
+  </main>
+
+  <!-- ============ CANONICAL FOOTER (copy to every page) ============ -->
+  <footer class="site-footer">
+    <p>Andrew Freeman · Project Portfolio</p>
+    <p>andrewfreeman803@gmail.com</p>
+    <p><a class="btn btn-email" href="mailto:andrewfreeman803@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/></svg>Email</a></p>
+    <p><a class="btn btn-linkedin" href="https://www.linkedin.com/in/andrew-freeman-411437264" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>LinkedIn</a></p>
+    <p>&copy; 2026 Andrew Freeman</p>
+  </footer>
+  <!-- ============ /FOOTER ============ -->
+
+  <script src="js/nav.js"></script>
+</body>
+</html>
