@@ -1,0 +1,37 @@
+from Features_defintions import *
+import Operating_functions as func
+import time
+
+def Capacity_Run(sp,cell_id):
+    try:
+    #storing locally
+        readTerm = func.readTerm
+        AHcalc = func.AHcalc
+        savedata = func.saveCapacityData
+
+        #turning on current for capacity test
+        func.Curr_captest(sp)
+        func.termON(sp)#terminals on
+        start_time = time.perf_counter()
+        print('term hot')
+        k= 0
+        ahused = 0
+        ahfunc = []
+
+        while True:
+            if not readTerm(k, sp, voltage_cutoff, voltageList, currentList, powerList, timeList, time.perf_counter()):
+                endtime = time.perf_counter()
+                print (f"'time delta '{(start_time -endtime)/3600}")
+                break
+            ahused = AHcalc(currentList[-1],timeList[-1], timeList[-2],ahused)
+            ahfunc.append(ahused)
+            savedata(voltageList,currentList,ahfunc,cell_id,ahused)
+            time.sleep(5)
+            k += 1
+
+    finally:
+        func.termOFF(sp)
+        print('term off')
+        savedata(voltageList,currentList,ahfunc,cell_id,ahused)
+        func.savecapacitydata_short(ahused,cell_id)
+        print('file saved')

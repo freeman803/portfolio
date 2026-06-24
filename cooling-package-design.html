@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cooling Design — Andrew Freeman</title>
+  <meta name="description" content="Cooling package design for Concordia's electric Formula car: radiator characterization, MoTeC data analysis, and MATLAB modelling.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="site-title" href="index.html">Project Portfolio <span>· Andrew Freeman</span></a>
+      <button class="nav-toggle" aria-label="Toggle navigation" aria-controls="primary-nav" aria-expanded="false">☰</button>
+      <ul class="nav" id="primary-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="pack-design.html">Pack Design</a></li>
+        <li><a href="cooling-package-design.html" class="active" aria-current="page">Cooling Package Design</a></li>
+        <li><a href="chassis.html">Chassis</a></li>
+        <li><a href="firmware.html">Firmware</a></li>
+        <li><a href="aws-deep-racer.html">AWS Deep Racer</a></li>
+        <li><a href="wiring-harness.html">Wiring &amp; Harness</a></li>
+        <li><a href="regen-braking.html">Regen Braking</a></li>
+      </ul>
+    </div>
+  </header>
+  <!-- ============ /HEADER ============ -->
+
+  <main>
+    <h1 class="page-title">Cooling Design</h1>
+    <p class="page-subtitle">Cooling Lead — Concordia Formula Racing</p>
+
+    <nav class="toc" aria-label="On this page">
+      <p class="toc__title">On this page</p>
+      <ul>
+        <li><a href="#methodology">Methodology</a></li>
+        <li><a href="#matlab-modelling">MATLAB Modelling</a></li>
+      </ul>
+    </nav>
+
+    <section class="section">
+      <p>
+        I served as Cooling Lead during my first year on Concordia's electric Formula team.
+        Following the team's transition from combustion to electric vehicles, the cooling
+        system required a complete redesign due to drastically different requirements.
+      </p>
+      <p>
+These images show examples of the design work completed for the vehicle cooling system. The primary objective was to quantify the car’s cooling requirements to ensure it could reliably complete 22 laps at the Michigan competition without overheating. Once the thermal demands were understood, the next challenge was selecting an off-the-shelf radiator capable of meeting those requirements, which proved difficult due to the lack of published performance data for most radiators.
+To overcome this, we designed and built a custom radiator test rig to experimentally characterize radiator performance under controlled conditions. In parallel, we used MoTeC to analyze real-world vehicle data, including coolant temperatures, flow rates, and ambient conditions. We also developed MATLAB simulations to evaluate different cooling scenarios, validate experimental results, and optimize radiator selection and flow requirements.
+      </p>
+      <div class="image-grid image-grid--gallery">
+        <img src="assets/images/cooling/gps-heat-out-orig_orig.png" alt="Cooling system design work" loading="lazy">
+        <img src="assets/images/cooling/motor-eff-gps-1-orig_orig.png" alt="Cooling system design work" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2025-03-30-120032-orig_orig.png" alt="Cooling system design work" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2025-03-30-120046-orig_orig.png" alt="Cooling system design work" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2025-03-30-120117-orig_orig.png" alt="Cooling system design work" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2026-02-13-211814-orig_orig.jpg" alt="Cooling system design work" loading="lazy">
+        <img src="assets/images/cooling/shared-image-2-orig_orig.jpg" alt="Cooling system design work" loading="lazy">
+      </div>
+    </section>
+
+    <section class="section" id="methodology">
+      <h2>Methodology</h2>
+      <ul class="bullet-list">
+        <li>Constructed a custom radiator test rig for experimental characterization</li>
+        <li>Analyzed real-world vehicle data via MoTeC, including coolant temperatures and flow rates</li>
+        <li>Developed MATLAB simulations to evaluate cooling scenarios and optimize radiator selection</li>
+      </ul>
+      <a class="download" href="assets/files/cooling_daq_code.ino">
+        📄 cooling_daq_code.ino
+      </a>
+    </section>
+
+    <section class="section" id="matlab-modelling">
+      <h2>MATLAB Modelling</h2>
+      <p>
+        This figure shows our initial MATLAB model. In the first iteration, we attempted to model every diameter reduction and bend in the tubing network. This required assigning individual loss coefficients and friction factors to each section of the loop. Due to limited instrumentation and the difficulty in accurately characterizing minor loss coefficients for each feature, this approach introduced significant uncertainty.
+The radiators and motor/inverter assemblies were experimentally characterized to obtain pressure drop as a function of flow rate. These component-level pressure drop curves were implemented directly into the model. It was assumed that their hydraulic behavior remained invariant across the operating range.
+The objective of this model was to quantify the distribution of pressure losses throughout the loop and support pump selection, specifically between the CWA100 and CWA150. However, when validated against full loop testing, the model exhibited significant error and did not accurately predict system behavior.
+The second figure shows a simplified system-level model developed to directly address pump selection. Instead of resolving individual geometric losses, the complete cooling loop was experimentally tested to obtain total pressure drop versus flow rate. This system curve was then implemented in MATLAB and intersected with the pump performance curves to determine the required operating points. The target flow rate was defined by the thermal analysis, and the model was used to determine the operating conditions necessary for each pump to achieve that requirement.
+      </p>
+      <div class="image-grid">
+        <img src="assets/images/screenshot-2026-02-13-220708-orig_orig.jpg" alt="Initial MATLAB cooling model" loading="lazy">
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ CANONICAL FOOTER (copy to every page) ============ -->
+  <footer class="site-footer">
+    <p>Andrew Freeman — Project Portfolio</p>
+    <p>andrewfreeman803@gmail.com</p>
+    <p><a class="btn btn-email" href="mailto:andrewfreeman803@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/></svg>Email</a></p>
+    <p><a class="btn btn-linkedin" href="https://www.linkedin.com/in/andrew-freeman-411437264" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>LinkedIn</a></p>
+    <p>&copy; 2026 Andrew Freeman</p>
+  </footer>
+  <!-- ============ /FOOTER ============ -->
+
+  <script src="js/nav.js"></script>
+</body>
+</html>

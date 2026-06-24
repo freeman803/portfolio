@@ -1,0 +1,131 @@
+from Features_defintions import *
+import Operating_functions as func
+import time
+
+
+class HPPCState:
+    (SNA,
+    START_DISCHARGE_PULSE, 
+    DISCHARGING_PULSE,
+    START_REST_PULSE,
+    RESTING_PULSE,
+    START_CHARGE_PULSE,
+    CHARGING_PULSE,
+    START_DISCHARGE_SOC,
+    DISCHARGING_SOC,
+    START_REST_SOC,
+    RESTING_SOC
+    ) = range(11)
+
+
+def HPPC_Run(sp,cell_id):
+    try:
+    #storing locally
+        readTerm = func.readTerm
+        AHcalc = func.AHcalc
+        savedata = func.saveCapacityData
+
+        #turning on current for capacity test
+        #func.Curr_captest(sp)
+        func.termON(sp)#terminals on
+        start_time = time.perf_counter()
+        print('term hot')
+        k= 0
+        ahused = 0
+        ahfunc = []
+        
+        discharge_pulse_start_time = 0
+        rest_pulse_start_time = 0
+        charge_pulse_start_time = 0
+        discharge_soc_start_time = 0
+        rest_soc_start_time = 0
+
+        HPPC_state = HPPCState.SNA
+        TheoreticalSOC = 100
+
+        input("Hit ENTER to start test")
+        HPPC_state = HPPCState.START_DISCHARGE_PULSE
+
+        isSafetyOn = True   # When safety is on (TRUE), test will not continue to the next step. 
+                            # Safety turns off (FALSE) when ENTER is hit.
+                            # When safety is off (FALSE), test will continue once timing is reached.
+
+        while True:
+            if not readTerm(k, sp, voltage_cutoff, voltageList, currentList, powerList, timeList, time.perf_counter()):
+                endtime = time.perf_counter()
+                print (f"'time delta '{(start_time -endtime)/3600}")
+                break
+            
+            if HPPC_state == HPPCState.START_DISCHARGE_PULSE :
+                input("Hit ENTER to start discharge")
+                func.HPPC_test(sp, 4.5)
+                discharge_pulse_start_time = time.perf_counter()
+                print("Discharge Started")
+                HPPC_state = HPPCState.DISCHARGING_PULSE
+            elif (HPPC_state == HPPCState.DISCHARGING_PULSE) and (time.perf_counter() - discharge_pulse_start_time >= 10):
+                func.termOFF(sp)
+                print("Discharge Finished")
+                discharge_pulse_start_time = 0
+                HPPC_state = HPPCState.START_REST_PULSE
+            elif HPPC_state == HPPCState.START_REST_PULSE:
+                #start rest
+                rest_pulse_start_time = time.perf_counter()
+                print("Rest Started")
+                HPPC_state = HPPCState.RESTING_PULSE
+            elif (HPPC_state == HPPCState.RESTING_PULSE) and (time.perf_counter() - rest_pulse_start_time >= 40) and (isSafetyOn==False): #Inline because faster
+                print("Rest Ended")
+                isSafetyOn = True
+                rest_pulse_start_time = 0
+                HPPC_state = HPPCState.START_CHARGE_PULSE
+            elif (HPPC_state == HPPCState.RESTING_PULSE) and (isSafetyOn==True):
+                input("Prepare for charging. Hit ENTER to start charging")
+                isSafetyOn = False
+            elif HPPC_state == HPPCState.START_CHARGE_PULSE:
+                func.HPPC_test(sp, 3.375)
+                charge_pulse_start_time = time.perf_counter()
+                print("Charge Started")
+                HPPC_state = HPPCState.CHARGING_PULSE
+            elif (HPPC_state == HPPCState.CHARGING_PULSE) and (time.perf_counter() - charge_pulse_start_time >=10):
+                func.termOFF(sp)
+                print("Charge Ended")
+                charge_pulse_start_time = 0
+                HPPC_state = HPPCState.START_DISCHARGE_SOC
+            
+            elif (HPPC_state == HPPCState.START_DISCHARGE_SOC):
+                input("Prepare for discharge. Hit ENTER to start SOC discharge")
+                func.HPPC_test(sp, 4.5)
+                discharge_soc_start_time = time.perf_counter()
+                print("SOC Discharging Started")
+                HPPC_state = HPPCState.DISCHARGING_SOC
+            elif (HPPC_state == HPPCState.DISCHARGING_SOC) and (time.perf_counter() - discharge_soc_start_time >= 60*6):
+                func.termOFF(sp)
+                print("SOC Discharge Ended")
+                discharge_soc_start_time = 0
+                HPPC_state = HPPCState.START_REST_SOC
+            elif HPPC_state == HPPCState.START_REST_SOC:
+                #start SOC rest
+                rest_soc_start_time = time.perf_counter()
+                print("SOC Discharge Rest Started")
+                HPPC_state = HPPCState.RESTING_SOC
+            elif (HPPC_state == HPPCState.RESTING_SOC) and (time.perf_counter() - rest_soc_start_time >= 3600):
+                print("SOC Rest Ended")
+                HPPC_state = HPPCState.START_DISCHARGE_PULSE
+                rest_soc_start_time = 0
+                TheoreticalSOC -= 10
+
+
+            ahused = AHcalc(currentList[-1],timeList[-1], timeList[-2],ahused)
+            ahfunc.append(ahused)
+            savedata(voltageList,currentList,ahfunc,cell_id,ahused)
+            k += 1
+
+            if TheoreticalSOC <=10:
+                print("SOC limit 10% reached")
+                break
+
+    finally:
+        func.termOFF(sp)
+        print('term off')
+        savedata(voltageList,currentList,ahfunc,cell_id,ahused)
+        func.savecapacitydata_short(ahused,cell_id)
+        print('file saved')

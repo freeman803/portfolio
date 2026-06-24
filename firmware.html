@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firmware — Andrew Freeman</title>
+  <meta name="description" content="Electrical and firmware integration for Concordia Formula Racing: CAN messaging, sensor bring-up, and vehicle control.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="site-title" href="index.html">Project Portfolio <span>· Andrew Freeman</span></a>
+      <button class="nav-toggle" aria-label="Toggle navigation" aria-controls="primary-nav" aria-expanded="false">☰</button>
+      <ul class="nav" id="primary-nav">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="pack-design.html">Pack Design</a></li>
+        <li><a href="cooling-package-design.html">Cooling Package Design</a></li>
+        <li><a href="chassis.html">Chassis</a></li>
+        <li><a href="firmware.html" class="active" aria-current="page">Firmware</a></li>
+        <li><a href="aws-deep-racer.html">AWS Deep Racer</a></li>
+        <li><a href="wiring-harness.html">Wiring &amp; Harness</a></li>
+        <li><a href="regen-braking.html">Regen Braking</a></li>
+      </ul>
+    </div>
+  </header>
+  <!-- ============ /HEADER ============ -->
+
+  <main>
+    <h1 class="page-title">Firmware</h1>
+    <p class="page-subtitle">Electrical &amp; Firmware Integration — Concordia Formula Racing</p>
+
+    <section class="section">
+      <p>
+        Source code:
+        <a href="https://github.com/concordia-fsae/firmware" target="_blank" rel="noopener">
+          github.com/concordia-fsae/firmware
+        </a>
+      </p>
+      <ul class="bullet-list">
+        <li>Edited and expanded CAN messaging within firmware to support new subsystems, improving communication reliability and system-level integration</li>
+        <li>Implemented additional CAN messages for enhanced data visibility, enabling improved logging, diagnostics, and real-time system monitoring</li>
+        <li>Developed and mapped driver-facin messages to the display, significantly improving the driver interface with clearer system feedback and fault indication</li>
+        <li>Brought up and validated shock displacement sensors, including calibration procedures to ensure accurate suspension travel data</li>
+        <li>Commissioned and calibrated the VC Front system, verifying proper operation and integration within the overall vehicle control architecture</li>
+        <li>Brought up the Tractive System Safety Indicator (TSSI), ensuring correct behavior and compliance with safety rules</li>
+        <li>Updated current scaling (mV/A) for the BOSS system based on datasheet specifications, improving measurement accuracy</li>
+        <li>Integrated motor controller CAN messages into the YAMCAN network, enabling full decoding and logging of drivetrain data for debugging, validation, and performance tuning</li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- ============ CANONICAL FOOTER (copy to every page) ============ -->
+  <footer class="site-footer">
+    <p>Andrew Freeman — Project Portfolio</p>
+    <p>andrewfreeman803@gmail.com</p>
+    <p><a class="btn btn-email" href="mailto:andrewfreeman803@gmail.com"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6zm-2 0l-8 5-8-5h16zm0 12H4V8l8 5 8-5v10z"/></svg>Email</a></p>
+    <p><a class="btn btn-linkedin" href="https://www.linkedin.com/in/andrew-freeman-411437264" target="_blank" rel="noopener" aria-label="LinkedIn"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg>LinkedIn</a></p>
+    <p>&copy; 2026 Andrew Freeman</p>
+  </footer>
+  <!-- ============ /FOOTER ============ -->
+
+  <script src="js/nav.js"></script>
+</body>
+</html>
