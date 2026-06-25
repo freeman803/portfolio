@@ -107,7 +107,6 @@ a:focus {
 
 .nav {
   display: flex;
-  flex: 1;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.4rem;
