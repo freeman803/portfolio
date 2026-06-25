@@ -68,13 +68,13 @@ a:focus {
 }
 
 .site-header__inner {
-  max-width: var(--content-max);
+  max-width: 1400px;
   margin: 0 auto;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-4);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-4);
 }
 
 .site-title {
@@ -107,8 +107,10 @@ a:focus {
 
 .nav {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  justify-content: flex-end;
+  gap: 0.4rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -116,10 +118,10 @@ a:focus {
 
 .nav a {
   display: block;
-  padding: 0.4rem 0.7rem;
+  padding: 0.5rem 0.95rem;
   border-radius: var(--radius);
   color: var(--color-text-muted);
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -142,6 +144,23 @@ main {
   max-width: var(--content-max);
   margin: 0 auto;
   padding: var(--space-4) var(--space-3) var(--space-5);
+}
+
+/* Pages with a side table of contents get a wider shell so the sidebar
+   sits beside the ~900px content column. */
+main.has-toc {
+  max-width: 1180px;
+}
+
+.page-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.page-content {
+  min-width: 0;
 }
 
 .page-title {
@@ -207,6 +226,20 @@ main {
   color: var(--color-accent);
   border-left-color: var(--color-accent);
   font-weight: 600;
+}
+
+/* In the side-by-side layout the TOC becomes a sticky sidebar that scrolls
+   independently of the content. */
+.page-layout .toc {
+  position: sticky;
+  top: 160px;
+  margin-bottom: 0;
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+}
+
+.page-layout .toc ul {
+  columns: 1;
 }
 
 .section {
@@ -436,6 +469,24 @@ main {
   fill: currentColor;
 }
 
+.btn-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #24292e;
+}
+
+.btn-github:hover,
+.btn-github:focus {
+  background: #1b1f23;
+}
+
+.btn-github svg {
+  width: 1.2em;
+  height: 1.2em;
+  fill: currentColor;
+}
+
 .code-block {
   background: var(--color-code-bg);
   color: var(--color-code-text);
@@ -494,27 +545,6 @@ main {
 .btn-outline:focus {
   background: var(--color-accent);
   color: #fff;
-}
-
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-}
-
-.btn-ghost:hover,
-.btn-ghost:focus {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.btn-ghost svg {
-  width: 1.2em;
-  height: 1.2em;
-  fill: currentColor;
 }
 
 /* Hero stat row — the headline metrics */
@@ -757,6 +787,28 @@ img.intro__photo {
   margin: var(--space-1) 0.3rem 0;
 }
 
+/* Not enough room for a sidebar: fall back to the stacked TOC-on-top layout. */
+@media (max-width: 1024px) {
+  main.has-toc {
+    max-width: var(--content-max);
+  }
+
+  .page-layout {
+    display: block;
+  }
+
+  .page-layout .toc {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    margin-bottom: var(--space-4);
+  }
+
+  .page-layout .toc ul {
+    columns: 2;
+  }
+}
+
 @media (max-width: 720px) {
   .nav-toggle {
     display: block;
@@ -790,7 +842,7 @@ img.intro__photo {
     font-size: 1.8rem;
   }
 
-  .toc ul {
+  .page-layout .toc ul {
     columns: 1;
   }
 }
