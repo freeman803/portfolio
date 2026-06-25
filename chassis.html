@@ -5,9 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chassis · Andrew Freeman</title>
   <meta name="description" content="Chassis design and welding for Concordia Formula Racing: FEA driven weight reduction, tube optimization, and fabrication.">
+  <link rel="icon" href="favicon.svg">
+  <link rel="canonical" href="https://freeman803.github.io/chassis.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Chassis · Andrew Freeman">
+  <meta property="og:description" content="Chassis design and welding for Concordia Formula Racing: FEA driven weight reduction, tube optimization, and fabrication.">
+  <meta property="og:url" content="https://freeman803.github.io/chassis.html">
+  <meta property="og:image" content="https://freeman803.github.io/assets/images/Chassis%20Manuf/media-30_orig.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Chassis · Andrew Freeman">
+  <meta name="twitter:description" content="Chassis design and welding for Concordia Formula Racing: FEA driven weight reduction, tube optimization, and fabrication.">
+  <meta name="twitter:image" content="https://freeman803.github.io/assets/images/Chassis%20Manuf/media-30_orig.jpg">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
   <header class="site-header">
     <div class="site-header__inner">
@@ -28,7 +40,7 @@
   </header>
   <!-- ============ /HEADER ============ -->
 
-  <main class="has-toc">
+  <main class="has-toc" id="main-content">
     <h1 class="page-title">Chassis</h1>
     <p class="page-subtitle">Chassis Design &amp; Fabrication · Concordia Formula Racing</p>
 
@@ -38,7 +50,11 @@
       <ul>
         <li><a href="#design-2025">2025 Chassis Design</a></li>
         <li><a href="#tube-sizing">Tube Sizing &amp; Optimization</a></li>
+        <li><a href="#testing-setup">Testing Setup</a></li>
+        <li><a href="#fea-iteration">FEA Iteration</a></li>
+        <li><a href="#fea-results">Final FEA Results</a></li>
         <li><a href="#redesign-2026">2026 Chassis Redesign</a></li>
+        <li><a href="#jigging-2026">Jigging</a></li>
         <li><a href="#welding-2026">2026 Welding &amp; Fabrication</a></li>
       </ul>
     </nav>
@@ -48,9 +64,9 @@
       <h2>2025 Chassis Design</h2>
 
       <div class="stat-row">
-        <div class="stat"><span class="stat__value">1500 Nm/deg</span><span class="stat__label">Torsional stiffness target</span></div>
+        <div class="stat"><span class="stat__value">1000 Nm/deg</span><span class="stat__label">Chassis torsional stiffness</span></div>
         <div class="stat"><span class="stat__value">100+</span><span class="stat__label">FEA iterations across geometries</span></div>
-        <div class="stat"><span class="stat__value">1.5 kg</span><span class="stat__label">Mass removed (2025 design)</span></div>
+        <div class="stat"><span class="stat__value">Custom Test Rig</span><span class="stat__label">Utilized custom test rig to obtain accurate chassis torsional stiffness</span></div>
       </div>
 
       <p>
@@ -60,19 +76,19 @@
       </p>
       <h3>Constraints</h3>
       <ul class="bullet-list">
-        <li>Chassis stiffness target (1500 nm/deg) </li>
+        <li>Chassis stiffness target (1500 Nm/deg)</li>
         <li>Maintain suspension pickup points</li>
         <li>Maintain brake system positioning / mounting</li>
         <li>Ergonomic requirements</li>
         <li>Maintain drivetrain placement</li>
       </ul>
       <div class="image-grid image-grid--gallery">
-        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-142744_orig.jpg" alt="2025 chassis design" loading="lazy">
-        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-142915_orig.jpg" alt="2025 chassis design" loading="lazy">
-        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143015_orig.jpg" alt="2025 chassis design" loading="lazy">
-        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143033_orig.jpg" alt="2025 chassis design" loading="lazy">
-        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143236_orig.jpg" alt="2025 chassis design" loading="lazy">
-        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143310_orig.jpg" alt="2025 chassis design" loading="lazy">
+        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-142744_orig.jpg" alt="2025 chassis CAD spaceframe, front three-quarter view" loading="lazy">
+        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-142915_orig.jpg" alt="2025 chassis CAD spaceframe, side view" loading="lazy">
+        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143015_orig.jpg" alt="2025 chassis tube structure detail" loading="lazy">
+        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143033_orig.jpg" alt="2025 chassis rear structure with motor-controller mounting" loading="lazy">
+        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143236_orig.jpg" alt="2025 chassis FEA torsional-stiffness load case" loading="lazy">
+        <img src="assets/images/Chassis%202025/screenshot-2026-03-30-143310_orig.jpg" alt="2025 chassis FEA displacement contour result" loading="lazy">
       </div>
     </section>
 
@@ -86,6 +102,105 @@
         <li>Conducted over 100 finite element analyses (FEA) across varying geometries and tube sizes</li>
         <li>Performed statistical analysis on chassis weight and torsional stiffness</li>
       </ul>
+    </section>
+
+    <section class="section" id="testing-setup">
+      <h2>Testing Setup</h2>
+      <p>
+        The test applies a couple moment at the front axle while the rear is held fixed.
+        Using a couple (two equal and opposite forces) rather than a single static force is
+        deliberate: it applies a pure torque with no net side load, which minimizes the
+        compliance of the test structure itself so the measured displacement reflects the
+        chassis rather than the rig. The moment is increased incrementally and then decreased,
+        and the displacement is measured at each step. We also run the load in reverse to check for hysteresis,
+        confirming the chassis returns along the same path and that the measurements are
+        repeatable. This load-displacement data is then used to calculate the torsional
+        stiffness.
+      </p>
+      <div class="figure-grid">
+        <figure>
+          <img src="assets/images/Chassis%202025/Torsion_test.png" alt="Chassis mounted on the custom torsion test rig" loading="lazy">
+          <figcaption>Torsion test rig (CAD)</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/images/Chassis%202025/Torsion_front.jpg" alt="Front of the chassis fixtured on the torsion test rig" loading="lazy">
+          <figcaption>Front setup: upright bolted to the bar, jack underneath for upward force</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/images/Chassis%202025/Torsion_Rear.png" alt="Rear mounting of the chassis on the torsion test rig" loading="lazy">
+          <figcaption>Rear mounting (fixed)</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/images/Chassis%202025/Torsion_measure.jpg" alt="Measuring chassis twist during the torsion test" loading="lazy">
+          <figcaption>Measuring twist under load</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/images/Chassis%202025/Torsion_Upright.png" alt="Upright fixture detail of the torsion test rig" loading="lazy">
+          <figcaption>Upright fixture (CAD)</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/images/Chassis%202025/Torsion_manuf.jpg" alt="Fabricating the torsion test rig" loading="lazy">
+          <figcaption>Fabricating the upright</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="fea-iteration">
+      <h2>FEA Iteration</h2>
+      <p>
+        For the first set of FEAs we fixed all eight rear A-arm pickup points to simulate our
+        test rig, then applied a couple moment at the front suspension points: four 1100 N
+        forces, which assumes roughly a 1.5 G load on a 330 kg car. This setup is
+        overconstrained and did not give accurate stiffness values, but its short compute time
+        made it useful for quickly comparing one geometry against another.
+      </p>
+      <div class="image-grid image-grid--pair">
+        <img src="assets/images/Chassis%202025/simple_ChassisFEA_setup.png" alt="FEA setup: rear A-arm pickup points fixed, couple moment applied at the front suspension points" width="284" height="177" loading="lazy">
+        <img src="assets/images/Chassis%202025/simple_ChassisFEA_result.png" alt="FEA result: chassis displacement under the applied front-suspension load case" width="352" height="228" loading="lazy">
+      </div>
+      <p class="figure-caption">Preliminary FEA results</p>
+      <p>
+        This method still did not correlate to our test results, so we added the suspension
+        compliance (the give in the pushrods and A-arms) to the model. Even then, the numbers
+        did not match the test closely enough.
+      </p>
+      <div class="image-grid image-grid--pair">
+        <img src="assets/images/Chassis%202025/Mature_FEA.png" alt="Mature FEA model including suspension compliance in the pushrod and A-arms" width="255" height="195" loading="lazy">
+        <img src="assets/images/Chassis%202025/FEA_Result.png" alt="FEA result with modelled suspension compliance, correlated to test data" width="290" height="194" loading="lazy">
+      </div>
+      <p class="figure-caption">FEA with modelled suspension compliance</p>
+      <p>
+        I also ran geometry changes one at a time to compare stiffness-to-mass ratios, for
+        example flipping tube orientation or changing tube profile. Isolating one change per
+        run made it clear how each affected the overall design and pointed toward future
+        improvements.
+      </p>
+      <div class="image-grid image-grid--pair">
+        <img src="assets/images/Chassis%202025/chassis_excel_fea.png" alt="Excel FEA tracking table comparing stiffness-to-mass ratios across geometry changes" width="625" height="237" loading="lazy">
+        <img src="assets/images/Chassis%202025/FEA_TRACKING.png" alt="FEA tracking chart of torsional stiffness and mass across geometry iterations" width="1628" height="1033" loading="lazy">
+      </div>
+      <p class="figure-caption">Different geometry matrix</p>
+    </section>
+
+    <section class="section" id="fea-results">
+      <h2>Final FEA Results</h2>
+      <p>
+        The final model used a simplified setup: rather than constraining and loading all four
+        corners, only a single node per corner is constrained or loaded. A fixed support is
+        applied at the right-rear, with the left-rear constrained to allow only lateral
+        deflection, and the load is applied at the front while deflection is measured near the
+        front pickup points. With this setup the FEA returned a torsional stiffness closer to
+        1000 Nm/deg, which is in line with our physical torsion-test results. It turns out the
+        1500 Nm/deg goal was carried over from when we were an internal-combustion team, where
+        the engine is bolted in as a stressed member and contributes to chassis stiffness.
+        Without that structural contribution on our electric car, the 1500 Nm/deg target is
+        unrealistic, and ~1000 Nm/deg is a more representative number for our spaceframe.
+      </p>
+      <div class="image-grid image-grid--pair">
+        <img src="assets/images/Chassis%202025/Final_FEA.png" alt="Final chassis FEA setup for the torsional-stiffness load case" width="744" height="414" loading="lazy">
+        <img src="assets/images/Chassis%202025/Final_FEA_Result.png" alt="Final chassis FEA displacement result used to compute torsional stiffness" width="710" height="395" loading="lazy">
+      </div>
+      <p class="figure-caption">Final FEA</p>
     </section>
 
     <section class="section" id="redesign-2026">
@@ -105,23 +220,39 @@
       </ul>
     </section>
 
-    <section class="section" id="welding-2026">
-      <h2>Manufacturing Phase: 2026 Welding &amp; Fabrication</h2>
+    <section class="section" id="jigging-2026">
+      <h2>Manufacturing Phase: Jigging</h2>
       <ul class="bullet-list">
-        <li>Welded the entire chassis after receiving notched tubes from VR3</li>
         <li>Developed and tested multiple jigging strategies to maintain alignment and dimensional accuracy throughout fabrication</li>
         <li>Utilized a rigid table setup with clamps and hard stops</li>
         <li>Adapted jig configurations in critical areas to improve alignment control around key nodes and suspension pickup points</li>
         <li>Continuously verified diagonals, reference points, and critical dimensions to ensure the chassis remained within tolerance during welding</li>
+      </ul>
+      <div class="figure-grid">
+        <figure>
+          <img src="assets/images/Chassis%202025/3D-Printed%20JIg.jpg" alt="3D-printed differential insert jig used during chassis fabrication" loading="lazy">
+          <figcaption>3D-Printed Diff insert jig</figcaption>
+        </figure>
+        <figure>
+          <img src="assets/images/Chassis%202025/Suspension_Jig.jpg" alt="Jig locating the suspension pickup points during welding" loading="lazy">
+          <figcaption>Suspension point jig</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="welding-2026">
+      <h2>Manufacturing Phase: 2026 Welding &amp; Fabrication</h2>
+      <ul class="bullet-list">
+        <li>Welded the entire chassis after receiving notched tubes from VR3</li>
         <li>Carefully managed weld sequencing to minimize heat induced distortion</li>
         <li>Gained hands on experience in full chassis fabrication, developing a deeper understanding of how manufacturing decisions impact structural performance and final vehicle quality</li>
       </ul>
       <div class="image-grid image-grid--gallery">
-        <img src="assets/images/Chassis%20Manuf/media-18_orig.jpg" alt="Chassis manufacturing and welding" loading="lazy">
-        <img src="assets/images/Chassis%20Manuf/media-19_orig.jpg" alt="Chassis manufacturing and welding" loading="lazy">
-        <img src="assets/images/Chassis%20Manuf/media-24_orig.jpg" alt="Chassis manufacturing and welding" loading="lazy">
-        <img src="assets/images/Chassis%20Manuf/media-30_orig.jpg" alt="Chassis manufacturing and welding" loading="lazy">
-        <img src="assets/images/Chassis%20Manuf/media-31_orig.jpg" alt="Chassis manufacturing and welding" loading="lazy">
+        <img src="assets/images/Chassis%20Manuf/media-18_orig.jpg" alt="Chassis tubes clamped in the welding jig on the alignment table" loading="lazy">
+        <img src="assets/images/Chassis%20Manuf/media-19_orig.jpg" alt="Welded tube node detail on the chassis" loading="lazy">
+        <img src="assets/images/Chassis%20Manuf/media-24_orig.jpg" alt="Partially welded chassis on the fabrication table" loading="lazy">
+        <img src="assets/images/Chassis%20Manuf/media-30_orig.jpg" alt="TIG welding a chassis joint" loading="lazy">
+        <img src="assets/images/Chassis%20Manuf/media-31_orig.jpg" alt="Completed welded chassis spaceframe" loading="lazy">
       </div>
     </section>
     </div>

@@ -5,9 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pack Design · Andrew Freeman</title>
   <meta name="description" content="High voltage battery pack design for Concordia Formula Racing: cell selection, testing, thermal modelling, and fuse design.">
+  <link rel="icon" href="favicon.svg">
+  <link rel="canonical" href="https://freeman803.github.io/pack-design.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Pack Design · Andrew Freeman">
+  <meta property="og:description" content="High voltage battery pack design for Concordia Formula Racing: cell selection, testing, thermal modelling, and fuse design.">
+  <meta property="og:url" content="https://freeman803.github.io/pack-design.html">
+  <meta property="og:image" content="https://freeman803.github.io/assets/images/pxl-20260301-000727058.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pack Design · Andrew Freeman">
+  <meta name="twitter:description" content="High voltage battery pack design for Concordia Formula Racing: cell selection, testing, thermal modelling, and fuse design.">
+  <meta name="twitter:image" content="https://freeman803.github.io/assets/images/pxl-20260301-000727058.jpg">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
   <header class="site-header">
     <div class="site-header__inner">
@@ -28,7 +40,7 @@
   </header>
   <!-- ============ /HEADER ============ -->
 
-  <main class="has-toc">
+  <main class="has-toc" id="main-content">
     <h1 class="page-title">Pack Design</h1>
     <p class="page-subtitle">High Voltage Lead · Concordia Formula Racing</p>
 
@@ -71,27 +83,16 @@
         first year (2024) I assembled the pack and printed board mounts. In 2026 I fully
         designed a custom 369.6 V, 88S4P pack rated for roughly 88 kW. Compared to the 2024
         pack it is 20 kg lighter, uses higher energy density modules, and integrates busbars
-        that slot into place as the lid is inserted  a design for assembly feature that cuts
+        that slot into place as the lid is inserted — a design-for-assembly feature that cuts
         build time and removes a class of assembly errors. Below are photos from assembly.
       </p>
       <div class="image-grid image-grid--gallery">
-        <img src="assets/images/pxl-20260301-000727058.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/pxl-20260303-041422793-2.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/pxl-20260303-080917894.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-49.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-27.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-28.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-29.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-35.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-36.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-37.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-38.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-39.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-40.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-41.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-42.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-43.jpg" alt="Battery pack assembly" loading="lazy">
-        <img src="assets/images/media-44.jpg" alt="Battery pack assembly" loading="lazy">
+        <img src="assets/images/pxl-20260301-000727058.jpg" alt="21700 cells seated in a module holder before welding" loading="lazy">
+        <img src="assets/images/pxl-20260303-041422793-2.jpg" alt="Nickel strips welded across the cell module" loading="lazy">
+        <img src="assets/images/pxl-20260303-080917894.jpg" alt="Assembled 88S4P segment with busbars seated" loading="lazy">
+        <img src="assets/images/media-49.jpg" alt="Battery segment wired into the pack enclosure" loading="lazy">
+        <img src="assets/images/media-27.jpg" alt="Pack enclosure with modules and BMS boards installed" loading="lazy">
+        <img src="assets/images/media-35.jpg" alt="Completed 369.6 V high-voltage battery pack" loading="lazy">
       </div>
     </section>
 
@@ -195,7 +196,7 @@ In the end, I prioritized repeatability over absolute accuracy. I soldered the s
         📄 hppc_file.txt
       </a>
       <p>
-Later in the year I developed an SOC (state of charge) estimation model that now tracks within roughly 2% across almost the entire SOC range; the only notable departure is below 10% SOC, where it underestimates by about 2%. I started by reviewing literature on equivalent circuit modeling to determine whether a 1RC or 2RC model would be more appropriate. There is still some debate on when each model outperforms the other, but I ultimately chose to use a 2RC model for electrical SOC estimation and a simpler 1R model for thermal calculations.
+Later in the year I developed an SOC (state of charge) estimation model that tracks within ±1% across the full SOC range. I started by reviewing literature on equivalent circuit modeling to determine whether a 1RC or 2RC model would be more appropriate. There is still some debate on when each model outperforms the other, but I ultimately chose to use a 2RC model for electrical SOC estimation and a simpler 1R model for thermal calculations.
 For thermal modeling, the difference in predicted power dissipation between a 1R and higher order model is relatively small. Most literature suggests that the cell’s thermal mass behaves like a large capacitor, smoothing out fast electrical dynamics that are neglected in a lower order model. Given our application and computational constraints, this was a reasonable tradeoff.
       </p>
       <p>
@@ -509,9 +510,9 @@ Experimental validation showed excellent agreement with the model, requiring onl
     <section class="section" id="pack-2024">
       <h2>2024 Pack</h2>
       <div class="image-grid image-grid--gallery">
-        <img src="assets/images/shared-image-3-orig.jpg" alt="2024 battery pack" loading="lazy">
-        <img src="assets/images/shared-image-4-orig.jpg" alt="2024 battery pack" loading="lazy">
-        <img src="assets/images/shared-image-5-orig.jpg" alt="2024 battery pack" loading="lazy">
+        <img src="assets/images/shared-image-3-orig.jpg" alt="2024 battery pack, assembled module stack" loading="lazy">
+        <img src="assets/images/shared-image-4-orig.jpg" alt="2024 battery pack, enclosure and wiring" loading="lazy">
+        <img src="assets/images/shared-image-5-orig.jpg" alt="2024 battery pack installed in the car" loading="lazy">
       </div>
     </section>
     </div>

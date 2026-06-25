@@ -5,9 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Firmware · Andrew Freeman</title>
   <meta name="description" content="Electrical and firmware integration for Concordia Formula Racing: CAN messaging, sensor bring up, and vehicle control.">
+  <link rel="icon" href="favicon.svg">
+  <link rel="canonical" href="https://freeman803.github.io/firmware.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Firmware · Andrew Freeman">
+  <meta property="og:description" content="Electrical and firmware integration for Concordia Formula Racing: CAN messaging, sensor bring up, and vehicle control.">
+  <meta property="og:url" content="https://freeman803.github.io/firmware.html">
+  <meta property="og:image" content="https://freeman803.github.io/assets/images/Profile1.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Firmware · Andrew Freeman">
+  <meta name="twitter:description" content="Electrical and firmware integration for Concordia Formula Racing: CAN messaging, sensor bring up, and vehicle control.">
+  <meta name="twitter:image" content="https://freeman803.github.io/assets/images/Profile1.jpg">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
   <header class="site-header">
     <div class="site-header__inner">
@@ -28,18 +40,27 @@
   </header>
   <!-- ============ /HEADER ============ -->
 
-  <main>
+  <main id="main-content">
     <h1 class="page-title">Firmware</h1>
     <p class="page-subtitle">Electrical &amp; Firmware Integration · Concordia Formula Racing</p>
 
     <section class="section">
       <p>
-        I work across the vehicle's distributed control system multiple microcontroller
-        nodes communicating over CAN bus in embedded C, handling messaging, sensor bring up,
-        and integration. Source code:
+        I work across the vehicle's distributed control system (multiple microcontroller
+        nodes communicating over a CAN bus in embedded C), handling messaging, sensor
+        bring-up, and integration. Source code:
         <a href="https://github.com/concordia-fsae/firmware" target="_blank" rel="noopener">
           github.com/concordia-fsae/firmware
         </a>
+      </p>
+      <!-- TODO (optional): a CAN bus trace or dashboard photo would add more visual evidence. -->
+      <p>
+        The car runs a distributed control architecture: separate vehicle-control,
+        power-distribution, and BMS nodes each run their own embedded-C firmware and
+        coordinate over a shared CAN bus, with every signal defined in YAMCAN (the team's
+        CAN database). Working at this level means a change is never just one board, it is the
+        message contract between boards, the decoding and logging path, and the fail-safe
+        behaviour when a node drops off the bus.
       </p>
 
       <h3>Diagnosing a competition critical fault</h3>
@@ -67,6 +88,1769 @@
         <li>Brought up the Tractive System Safety Indicator (TSSI), the mandatory FSAE light that shows whether the high voltage system is live, ensuring correct behavior and rules compliance</li>
         <li>Corrected current sensor scaling (mV/A) for the battery current sensing system against datasheet specifications, improving measurement accuracy</li>
       </ul>
+
+      <h3>Cooling control logic (embedded C)</h3>
+      <p>
+        The cooling module runs at 10 Hz on the vehicle controller, driving the pump and fan
+        through VN9008 high-side drivers based on motor temperature and vehicle state. The
+        surrounding framework (CAN signal RX, the VN9008 and timer drivers, and the module
+        scheduler) is the team's shared firmware; <strong>my contributions here are the
+        hot-drivetrain temperature logic and the test-mode fan/pump logic.</strong>
+      </p>
+      <ul class="bullet-list">
+        <li><strong>Hot-drivetrain logic:</strong> uses hysteresis on motor temperature (on at 60 °C, off at 55 °C) so the state can't chatter around the threshold, and drives the fan to 100% duty whenever the drivetrain is hot.</li>
+        <li><strong>Test fan/pump logic:</strong> lets the driver toggle the pump or fan from a steering-wheel switch: it edge-detects the request (an XOR on the rising edge so each press flips the state once) and force-clears test mode if the high-side driver reports an overcurrent or overtemp fault, so a manual test can never override a hardware fault.</li>
+      </ul>
+      <details class="code-details">
+        <summary>Show cooling.c source</summary>
+        <pre class="code-block code-block--scroll"><code>/**
+ * @file cooling.c
+ * @brief  Source code for Cooling Application
+ */
+
+/******************************************************************************
+ *                             I N C L U D E S
+ ******************************************************************************/
+
+#include "app_vehicleState.h"
+#include "drv_outputAD.h"
+#include "drv_timer.h"
+#include "drv_vn9008.h"
+#include "HW_tim.h"
+#include "Module.h"
+
+/******************************************************************************
+ *                              D E F I N E S
+ ******************************************************************************/
+
+#define START_TIMER_MS                 500U
+#define START_DUTY                     1.0f
+#define FAN_ON_DUTY                    0.8f
+#define PUMP_ON_DUTY                   1.0f
+#define TEST_DUTY                      1.0f
+#define FAN_ON_DUTY_HOT                1.0f
+
+#define COOLING_LATCH_START_THRESH     50.0f
+#define COOLING_LATCH_STOP_THRESH      45.0f
+#define HOT_DRIVETRAIN_START_THRESH    60.0f
+#define HOT_DRIVETRAIN_STOP_THRESH     55.0f
+
+/******************************************************************************
+ *                         P R I V A T E  V A R S
+ ******************************************************************************/
+
+static struct
+{
+    drv_timer_S enableTimerFan;
+    drv_timer_S enableTimerPump;
+    bool        drivetrainCoolingLatched;
+    bool        drivetrainHot;
+} cooling;
+
+static struct
+{
+    bool isTestPump;
+    bool isTestFan;
+    bool wasRequestPump;
+    bool wasRequestFan;
+} test;
+
+/******************************************************************************
+ *                     P R I V A T E  F U N C T I O N S
+ ******************************************************************************/
+
+static void setDuty(drv_vn9008_E channel, float32_t duty, drv_timer_S* enableTimer, bool recover)
+{
+    const drv_timer_state_E timerState        = drv_timer_getState(enableTimer);
+    const bool              startTimerExpired = timerState == DRV_TIMER_EXPIRED;
+    const bool              startTimerRunning = timerState == DRV_TIMER_RUNNING;
+
+    if (recover)
+    {
+        drv_timer_stop(enableTimer);
+        duty = 0.0f;
+    }
+    if ((duty &gt; 0.0f) &amp;&amp; !startTimerExpired)
+    {
+        if (!startTimerRunning)
+        {
+            drv_timer_start(enableTimer, START_TIMER_MS);
+        }
+
+        duty = (duty &gt; START_DUTY) ? duty : START_DUTY;
+    }
+    else if (duty &lt;= 0.0f)
+    {
+        drv_timer_stop(enableTimer);
+    }
+
+    drv_vn9008_setDuty(channel, duty);
+}
+
+/******************************************************************************
+ *                       P U B L I C  F U N C T I O N S
+ ******************************************************************************/
+
+/**
+ * @brief  Cooling Module Init function
+ */
+static void cooling_init()
+{
+    drv_timer_init(&amp;cooling.enableTimerFan);
+    test.wasRequestFan    = false;
+    test.wasRequestPump   = false;
+    test.isTestPump       = false;
+    test.isTestFan        = false;
+    cooling.drivetrainHot = false;
+}
+
+/**
+ * @brief  Cooling Module 10Hz periodic function
+ */
+static void cooling10Hz_PRD(void)
+{
+    float32_t motorTemp = 0.0f;
+
+    (void)CANRX_get_signal(VEH, PM100DX_motorTemp, &amp;motorTemp);
+
+    if (cooling.drivetrainCoolingLatched)
+    {
+        cooling.drivetrainCoolingLatched = motorTemp &gt; COOLING_LATCH_STOP_THRESH;
+    }
+    else
+    {
+        cooling.drivetrainCoolingLatched = motorTemp &gt; COOLING_LATCH_START_THRESH;
+    }
+
+    CAN_digitalStatus_E requestChangePump = CAN_DIGITALSTATUS_SNA;
+    CAN_digitalStatus_E requestChangeFan  = CAN_DIGITALSTATUS_SNA;
+    const bool          requestedPump     = (CANRX_get_signal(VEH, SWS_requestTestPump, &amp;requestChangePump) == CANRX_MESSAGE_VALID) &amp;&amp; (requestChangePump == CAN_DIGITALSTATUS_ON);
+    const bool          requestedFan      = (CANRX_get_signal(VEH, SWS_requestTestFan, &amp;requestChangeFan) == CANRX_MESSAGE_VALID) &amp;&amp; (requestChangeFan == CAN_DIGITALSTATUS_ON);
+    const bool          isHV              = app_vehicleState_getState() == VEHICLESTATE_ON_HV;
+    const bool          isRun             = app_vehicleState_getState() == VEHICLESTATE_TS_RUN;
+
+    const bool          faultPump         = (drv_vn9008_getState(DRV_VN9008_CHANNEL_PUMP) == DRV_HSD_STATE_OVERCURRENT) ||
+                                            (drv_vn9008_getState(DRV_VN9008_CHANNEL_PUMP) == DRV_HSD_STATE_OVERTEMP);
+    const bool          faultFan          = (drv_vn9008_getState(DRV_VN9008_CHANNEL_FAN) == DRV_HSD_STATE_OVERCURRENT) ||
+                                            (drv_vn9008_getState(DRV_VN9008_CHANNEL_FAN) == DRV_HSD_STATE_OVERTEMP);
+
+    test.isTestPump    ^= (!test.wasRequestPump &amp;&amp; requestedPump);
+    test.isTestFan     ^= (!test.wasRequestFan &amp;&amp; requestedFan);
+    test.wasRequestPump = requestedPump;
+    test.wasRequestFan  = requestedFan;
+    test.isTestFan     &amp;= !faultFan;
+    test.isTestPump    &amp;= !faultPump;
+
+    if (motorTemp &gt; HOT_DRIVETRAIN_START_THRESH)
+    {
+        cooling.drivetrainHot = true;
+    }
+    if (motorTemp &lt; HOT_DRIVETRAIN_STOP_THRESH)
+    {
+        cooling.drivetrainHot = false;
+    }
+    float32_t  fanDutyCycle = cooling.drivetrainHot ? FAN_ON_DUTY_HOT : FAN_ON_DUTY;
+    float32_t  dutyFan      = test.isTestFan? TEST_DUTY: fanDutyCycle;
+    float32_t  dutyPump     = test.isTestPump ? TEST_DUTY : PUMP_ON_DUTY;
+    const bool enablePump   = (isHV || isRun || test.isTestPump || cooling.drivetrainCoolingLatched) &amp;&amp; !faultPump;
+    const bool enableFan    = (isRun || test.isTestFan || cooling.drivetrainCoolingLatched) &amp;&amp; !faultFan;
+
+    setDuty(DRV_VN9008_CHANNEL_PUMP, enablePump ? dutyPump : 0.0f, &amp;cooling.enableTimerPump, faultPump);
+    setDuty(DRV_VN9008_CHANNEL_FAN,  enableFan ? dutyFan : 0.0f,   &amp;cooling.enableTimerFan,  faultFan);
+}
+
+/**
+ * @brief  Cooling Module descriptor
+ */
+const ModuleDesc_S cooling_desc = {
+    .moduleInit       = &amp;cooling_init,
+    .periodic10Hz_CLK = &amp;cooling10Hz_PRD,
+};</code></pre>
+      </details>
+      <h3>Enforcing the 80 kW power limit in firmware</h3>
+      <p>
+        FSAE caps tractive-system power at 80 kW, and we can't rely on the motor controller's
+        own current sensing to stay under it. So the limit is enforced in our own firmware, in
+        two places I implemented:
+      </p>
+      <ul class="bullet-list">
+        <li><strong>At the battery (BMS.c):</strong> I made the discharge-current limit (DCL) the pack broadcasts respect the 80 kW cap: after the usual temperature derating, the DCL is clamped so that <code>DCL &times; pack voltage</code> can never exceed 80 kW. The pack itself refuses to allow more than 80 kW out, independent of anything downstream.</li>
+        <li><strong>At the rear vehicle controller (mcManager.c):</strong> instead of trusting the inverter, the VCREAR takes the BMS's max discharge current and pack voltage over CAN and converts that allowable power into a torque limit at the current motor speed (<code>&tau; = P / &omega;</code>), then saturates the driver's torque request to it every 100 Hz cycle.</li>
+      </ul>
+      <p>
+        Together these give a power cap that holds even if the motor controller's current
+        sensing is wrong: the BMS bounds the current the pack will deliver, and the VCREAR
+        bounds the torque it will ever command from it.
+      </p>
+
+      <p class="figure-caption">BMS.c: clamp the discharge limit to the 80 kW power cap</p>
+      <pre class="code-block"><code>static void dischargeLimit(BMSB_S* bms, batteryModel_S* batteryModel)
+{
+    // ... fault check + temperature derating set bms-&gt;discharge_limit ...
+
+    // Cap the discharge current so pack power can never exceed 80 kW (MAX_POWER)
+    if ((bms-&gt;discharge_limit * bms-&gt;pack_voltage_calculated) &gt; MAX_POWER)
+    {
+        bms-&gt;discharge_limit = MAX_POWER / bms-&gt;pack_voltage_calculated;
+    }
+}</code></pre>
+
+      <p class="figure-caption">mcManager.c: convert the BMS discharge limit into a motor torque cap (100 Hz)</p>
+      <pre class="code-block"><code>// Don't trust the inverter's current limiting: derive an allowable torque
+// from the BMS discharge limit. P = V * I_discharge, so torque = P / omega.
+if (speed_valid &amp;&amp; discharge_valid &amp;&amp; voltage_valid &amp;&amp; (motor_rpm &gt; 0))
+{
+    mcManager_data.vcRear_torqueLimitCurrent =
+        BMSB_voltage * BMSB_maxDischarge / (RPM_TO_RAD_P_S((float32_t)motor_rpm));
+}
+else
+{
+    mcManager_data.vcRear_torqueLimitCurrent = MCMANAGER_TORQUE_LIMIT;
+}
+
+// ... later: saturate the commanded torque to that BMS-derived limit
+const float32_t effectiveMaxLimit =
+    (!isRegenTorque &amp;&amp; (mcManager_data.vcRear_torqueLimitCurrent &lt; maxLimit)) ?
+        mcManager_data.vcRear_torqueLimitCurrent : maxLimit;
+torque_command = SATURATE(minLimit, torque_command, effectiveMaxLimit);</code></pre>
+
+      <p>Full source:</p>
+      <a class="download" href="assets/files/mcManager.c">📄 mcManager.c</a>
+      <a class="download" href="assets/files/BMS.c">📄 BMS.c</a>
+
+      <details class="code-details">
+        <summary>Show mcManager.c source</summary>
+        <pre class="code-block code-block--scroll"><code>/**
+ * @file mcManager.c
+ * @brief Source file for the motor controller manager
+ */
+
+/******************************************************************************
+ *                             I N C L U D E S
+ ******************************************************************************/
+
+#include "mcManager.h"
+#include "Module.h"
+#include "ModuleDesc.h"
+#include "string.h"
+
+#include "app_faultManager.h"
+#include "drv_tempSensors.h"
+#include "drv_timer.h"
+#include "drv_timer.h"
+#include "lib_rateLimit.h"
+#include "lib_simpleFilter.h"
+#include "lib_utility.h"
+#include "Yamcan.h"
+
+/******************************************************************************
+ *                             T Y P E D E F S
+ ******************************************************************************/
+
+typedef enum
+{
+    REQUEST_PARAMETER = 0x00U,
+    READ_PARAMETER,
+    PAUSE,
+    SPIN_MOTOR,
+    SAMPLE,
+} calibrationPhase_E;
+
+typedef enum
+{
+    EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT = 0x00U,
+    EEPROM_PARAMETER_GAMMA_ADJUST,
+    EEPROM_PARAMETER_COUNT,
+} eepromParameter_E;
+
+typedef enum
+{
+    EEPROM_PARAMETER_UNIT_AMP = 0x00U,
+    EEPROM_PARAMETER_UNIT_DEGREE,
+    EEPROM_PARAMETER_UNIT_COUNT,
+} eepromParameterUnit_E;
+
+typedef struct
+{
+    CAN_pm100dxEepromAddress_E address;
+    eepromParameterUnit_E      unit;
+    bool                       clampValue;
+    float32_t                  minValue;
+    float32_t                  maxValue;
+} eepromParameterConfig_S;
+
+typedef struct
+{
+    float32_t rawMultiplier;
+} eepromParameterUnitConfig_S;
+
+typedef struct
+{
+    int16_t                      savedRaw;
+    int16_t                      requestedRaw;
+    int16_t                      transmittedRaw;
+    CAN_pm100dxEepromRWCommand_E transmittedCommand;
+    bool                         savedValid;
+    bool                         requestValid;
+    bool                         readRequested;
+    bool                         writeRequested;
+    bool                         transmitPending;
+    uint8_t                      updateCount;
+} eepromParameterState_S;
+
+typedef struct
+{
+    CAN_pm100dxEepromAddress_E   address;
+    CAN_pm100dxEepromRWCommand_E command;
+    int16_t                      rawData;
+    bool                         queued;
+} eepromCommandQueue_S;
+
+/******************************************************************************
+ *                              D E F I N E S
+ ******************************************************************************/
+
+#define CALIBRATION_PAUSE_TIME_MS          2000U
+#define CALIBRATION_SPIN_TIMEOUT_MS        10000U
+#define CALIBRATION_TORQUE_REQUEST_NM      10
+#define MCMANAGER_TORQUE_LIMIT             180.0f
+#define MCMANAGER_TORQUE_LIMIT_REVERSE     25.0f
+
+#define LASH_TORQUE                        2.0f
+#define LASH_TORQUE_RPM_DISABLE            180.0f
+#define LASH_TORQUE_RPM_ENABLE             2 * LASH_TORQUE_RPM_DISABLE
+
+#define DRIVETRAIN_MULTIPLIER              4.6f
+
+#define RAMPRATE_NM_PER_S                  1000
+
+#define MOTOR_BACKWARDS                    true
+#define MC_COMMAND_REVERSE                 (MOTOR_BACKWARDS ? CAN_PM100DXDIRECTIONCOMMAND_FORWARD : CAN_PM100DXDIRECTIONCOMMAND_REVERSE)
+#define MC_COMMAND_FORWARD                 (MOTOR_BACKWARDS ? CAN_PM100DXDIRECTIONCOMMAND_REVERSE : CAN_PM100DXDIRECTIONCOMMAND_FORWARD)
+
+#define FLUX_WEAKENING_CURRENT_MIN_A       0.0f
+#define FLUX_WEAKENING_CURRENT_MAX_A       225.0f
+#define FLUX_WEAKENING_CURRENT_STEP_A      1.0f
+#define FLUX_WEAKENING_CURRENT_DELAY_MS    250U
+
+#define EEPROM_BOOT_READ_DELAY_MS          500U
+
+/******************************************************************************
+ *                         P R I V A T E  V A R S
+ ******************************************************************************/
+
+static struct
+{
+    lib_rateLimit_linear_S        torque_command;
+    mcManager_direction_E         direction;
+    mcManager_enable_E            enable;
+    float32_t                     torque_limit;
+    CAN_prechargeContactorState_E last_contactor_state;
+    bool                          clear_faults;
+    bool                          lash_enabled;
+    bool                          calibrating;
+    bool                          testCalibration;
+
+    uint16_t                      axle_rpm;
+    float32_t                     tempTsCap;
+    float32_t                     vcRear_torqueLimitCurrent;
+} mcManager_data;
+
+static struct
+{
+    uint8_t                    attempts;
+    calibrationPhase_E         state;
+    float32_t                  angleConfigured;
+    lib_simpleFilter_cumAvgF_S deltaFilteredMeasuredAvg;
+    drv_timer_S                timerPause;
+    uint8_t                    parameterUpdateCount;
+} calibrationData;
+
+static struct
+{
+    bool        init;
+    drv_timer_S timerChange;
+}                                        currentFluxWeakening;
+
+static eepromParameterState_S            eepromParameters[EEPROM_PARAMETER_COUNT];
+static eepromCommandQueue_S              eepromCommandQueue;
+static drv_timer_S                       eepromBootReadDelay;
+
+static const eepromParameterUnitConfig_S eepromParameterUnitConfigs[EEPROM_PARAMETER_UNIT_COUNT] = {
+    [EEPROM_PARAMETER_UNIT_AMP]    = {
+        .rawMultiplier = 10.0f,
+    },
+    [EEPROM_PARAMETER_UNIT_DEGREE] = {
+        .rawMultiplier = 10.0f,
+    },
+};
+
+static const eepromParameterConfig_S     eepromParameterConfigs[EEPROM_PARAMETER_COUNT] = {
+    [EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT] = {
+        .address    = CAN_PM100DXEEPROMADDRESS_CURRENT_MAX_ID,
+        .unit       = EEPROM_PARAMETER_UNIT_AMP,
+        .clampValue = true,
+        .minValue   = FLUX_WEAKENING_CURRENT_MIN_A,
+        .maxValue   = FLUX_WEAKENING_CURRENT_MAX_A,
+    },
+    [EEPROM_PARAMETER_GAMMA_ADJUST] =           {
+        .address    = CAN_PM100DXEEPROMADDRESS_GAMMA_ADJUST_EEPROM,
+        .unit       = EEPROM_PARAMETER_UNIT_DEGREE,
+        .clampValue = false,
+        .minValue   =                                         0.0f,
+        .maxValue   =                                       359.9f,
+    },
+};
+
+/******************************************************************************
+ *                     P R I V A T E  F U N C T I O N S
+ ******************************************************************************/
+
+static int16_t eepromValueToRaw(const eepromParameter_E parameter, float32_t value)
+{
+    const eepromParameterConfig_S * const     config = &amp;eepromParameterConfigs[parameter];
+    const eepromParameterUnitConfig_S * const unit   = &amp;eepromParameterUnitConfigs[config-&gt;unit];
+
+    if (config-&gt;clampValue)
+    {
+        value = SATURATE(config-&gt;minValue, value, config-&gt;maxValue);
+    }
+
+    return (int16_t)(value * unit-&gt;rawMultiplier);
+}
+
+static float32_t eepromRawToValue(const eepromParameter_E parameter, const int16_t raw)
+{
+    const eepromParameterConfig_S * const     config = &amp;eepromParameterConfigs[parameter];
+    const eepromParameterUnitConfig_S * const unit   = &amp;eepromParameterUnitConfigs[config-&gt;unit];
+    float32_t                                 value  = ((float32_t)raw) / unit-&gt;rawMultiplier;
+
+    if (config-&gt;clampValue)
+    {
+        value = SATURATE(config-&gt;minValue, value, config-&gt;maxValue);
+    }
+
+    return value;
+}
+
+static bool sendEepromCommand(const CAN_pm100dxEepromAddress_E   address,
+                              const CAN_pm100dxEepromRWCommand_E command,
+                              const int16_t                      rawData)
+{
+    if (CANTX_inject_pending(VEH, TOOLING_mcEepromCommand))
+    {
+        return false;
+    }
+
+    CAN_data_T message = { 0 };
+    set(&amp;message, VEH, TOOLING, eepromAddress, address);
+    set(&amp;message, VEH, TOOLING, eepromCommand, command);
+    set(&amp;message, VEH, TOOLING, eepromDataRaw, (uint32_t)(uint16_t)rawData);
+
+    return CANTX_inject(VEH, TOOLING_mcEepromCommand, &amp;message);
+}
+
+static bool getEepromResponse(CAN_pm100dxEepromAddress_E * const   address,
+                              CAN_pm100dxEepromRWCommand_E * const command,
+                              int16_t * const                      rawData)
+{
+    const bool eepromActive = CANRX_validate(VEH, PM100DX_eepromResponse) == CANRX_MESSAGE_VALID;
+
+    if (!eepromActive)
+    {
+        return false;
+    }
+
+    CAN_pm100dxEepromAddress_E   parameter     = (CAN_pm100dxEepromAddress_E)0U;
+    CAN_pm100dxEepromRWCommand_E eepromCommand = CAN_PM100DXEEPROMRWCOMMAND_READ;
+    uint16_t                     data          = 0U;
+    (void)CANRX_get_signal(VEH, PM100DX_eepromAddress, &amp;parameter);
+    (void)CANRX_get_signal(VEH, PM100DX_eepromCommand, &amp;eepromCommand);
+    (void)CANRX_get_signal(VEH, PM100DX_eepromDataRaw, &amp;data);
+
+    if ((uint32_t)parameter == 0U)
+    {
+        return false;
+    }
+
+    if (address != NULL)
+    {
+        *address = parameter;
+    }
+    if (command != NULL)
+    {
+        *command = eepromCommand;
+    }
+    if (rawData != NULL)
+    {
+        *rawData = (int16_t)data;
+    }
+
+    return true;
+}
+
+static bool eepromFindParameter(const CAN_pm100dxEepromAddress_E address, eepromParameter_E * const parameter)
+{
+    for (uint8_t i = 0U; i &lt; (uint8_t)EEPROM_PARAMETER_COUNT; i++)
+    {
+        const eepromParameter_E candidate = (eepromParameter_E)i;
+        if (eepromParameterConfigs[candidate].address == address)
+        {
+            *parameter = candidate;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void eepromApplyParameter(const eepromParameter_E parameter)
+{
+    switch (parameter)
+    {
+        case EEPROM_PARAMETER_GAMMA_ADJUST:
+            calibrationData.angleConfigured = eepromRawToValue(EEPROM_PARAMETER_GAMMA_ADJUST,
+                                                               eepromParameters[EEPROM_PARAMETER_GAMMA_ADJUST].savedRaw);
+            break;
+
+        case EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT:
+        case EEPROM_PARAMETER_COUNT:
+            break;
+    }
+}
+
+static void eepromHandleResponses(void)
+{
+    CAN_pm100dxEepromAddress_E   address   = (CAN_pm100dxEepromAddress_E)0U;
+    CAN_pm100dxEepromRWCommand_E command   = CAN_PM100DXEEPROMRWCOMMAND_READ;
+    int16_t                      rawData   = 0;
+    eepromParameter_E            parameter = EEPROM_PARAMETER_COUNT;
+
+    if (!getEepromResponse(&amp;address, &amp;command, &amp;rawData) ||
+        !eepromFindParameter(address, &amp;parameter)
+        )
+    {
+        return;
+    }
+
+    eepromParameterState_S * const state                   = &amp;eepromParameters[parameter];
+    const bool                     responseMatchesTransmit = state-&gt;transmitPending &amp;&amp;
+                                                             (state-&gt;transmittedCommand == command) &amp;&amp;
+                                                             ((command == CAN_PM100DXEEPROMRWCOMMAND_READ) ||
+                                                              (rawData == state-&gt;transmittedRaw));
+
+    state-&gt;savedRaw   = rawData;
+    state-&gt;savedValid = true;
+    state-&gt;updateCount++;
+    eepromApplyParameter(parameter);
+
+    if (!state-&gt;requestValid)
+    {
+        state-&gt;requestedRaw = rawData;
+        state-&gt;requestValid = true;
+    }
+
+    if (responseMatchesTransmit)
+    {
+        state-&gt;transmitPending = false;
+        if (command == CAN_PM100DXEEPROMRWCOMMAND_READ)
+        {
+            state-&gt;readRequested = false;
+        }
+    }
+    state-&gt;writeRequested = state-&gt;requestValid &amp;&amp;
+                            (state-&gt;savedRaw != state-&gt;requestedRaw) &amp;&amp;
+                            !state-&gt;transmitPending;
+}
+
+static void eepromTransmitPending(void)
+{
+    for (uint8_t i = 0U; i &lt; (uint8_t)EEPROM_PARAMETER_COUNT; i++)
+    {
+        if (eepromParameters[(eepromParameter_E)i].transmitPending)
+        {
+            return;
+        }
+    }
+
+    if (eepromCommandQueue.queued)
+    {
+        if (sendEepromCommand(eepromCommandQueue.address,
+                              eepromCommandQueue.command,
+                              eepromCommandQueue.rawData)
+            )
+        {
+            eepromCommandQueue.queued = false;
+        }
+        return;
+    }
+
+    for (uint8_t i = 0U; i &lt; (uint8_t)EEPROM_PARAMETER_COUNT; i++)
+    {
+        const eepromParameter_E        parameter = (eepromParameter_E)i;
+        eepromParameterState_S * const state     = &amp;eepromParameters[parameter];
+
+        if (state-&gt;requestValid &amp;&amp; state-&gt;writeRequested)
+        {
+            if (sendEepromCommand(eepromParameterConfigs[parameter].address,
+                                  CAN_PM100DXEEPROMRWCOMMAND_WRITE,
+                                  state-&gt;requestedRaw)
+                )
+            {
+                state-&gt;transmitPending    = true;
+                state-&gt;transmittedCommand = CAN_PM100DXEEPROMRWCOMMAND_WRITE;
+                state-&gt;transmittedRaw     = state-&gt;requestedRaw;
+                state-&gt;writeRequested     = false;
+            }
+            return;
+        }
+    }
+
+    if (drv_timer_getState(&amp;eepromBootReadDelay) == DRV_TIMER_RUNNING)
+    {
+        return;
+    }
+
+    for (uint8_t i = 0U; i &lt; (uint8_t)EEPROM_PARAMETER_COUNT; i++)
+    {
+        const eepromParameter_E        parameter = (eepromParameter_E)i;
+        eepromParameterState_S * const state     = &amp;eepromParameters[parameter];
+
+        if (state-&gt;readRequested)
+        {
+            if (sendEepromCommand(eepromParameterConfigs[parameter].address,
+                                  CAN_PM100DXEEPROMRWCOMMAND_READ,
+                                  0)
+                )
+            {
+                state-&gt;transmitPending    = true;
+                state-&gt;transmittedCommand = CAN_PM100DXEEPROMRWCOMMAND_READ;
+                state-&gt;transmittedRaw     = 0;
+            }
+            return;
+        }
+    }
+}
+
+static void updateFluxWeakeningCurrentRequest(const int16_t requestSum)
+{
+    if (requestSum == 0)
+    {
+        drv_timer_stop(&amp;currentFluxWeakening.timerChange);
+        return;
+    }
+
+    const drv_timer_state_E timerState = drv_timer_getState(&amp;currentFluxWeakening.timerChange);
+    if (timerState == DRV_TIMER_RUNNING)
+    {
+        return;
+    }
+    if (timerState == DRV_TIMER_EXPIRED)
+    {
+        drv_timer_stop(&amp;currentFluxWeakening.timerChange);
+        return;
+    }
+
+    eepromParameterState_S * const state = &amp;eepromParameters[EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT];
+
+    if (!state-&gt;savedValid)
+    {
+        return;
+    }
+
+    const int16_t rawRequested = state-&gt;requestValid ? state-&gt;requestedRaw : state-&gt;savedRaw;
+    const int16_t rawNext      = eepromValueToRaw(EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT,
+                                                  eepromRawToValue(EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT, rawRequested) +
+                                                  (FLUX_WEAKENING_CURRENT_STEP_A * (float32_t)requestSum));
+
+    if (rawNext == rawRequested)
+    {
+        drv_timer_start(&amp;currentFluxWeakening.timerChange, FLUX_WEAKENING_CURRENT_DELAY_MS);
+        return;
+    }
+
+    state-&gt;requestedRaw   = rawNext;
+    state-&gt;requestValid   = true;
+    state-&gt;writeRequested = state-&gt;savedRaw != state-&gt;requestedRaw;
+    drv_timer_start(&amp;currentFluxWeakening.timerChange, FLUX_WEAKENING_CURRENT_DELAY_MS);
+}
+
+static void evaluateFluxWeakeningCurrent(void)
+{
+    CAN_digitalStatus_E request    = CAN_DIGITALSTATUS_SNA;
+    const bool          requestInc = (CANRX_get_signal(VEH, SWS_requestFluxWeakeningCurrentInc, &amp;request) == CANRX_MESSAGE_VALID) &amp;&amp;
+                                     (request == CAN_DIGITALSTATUS_ON);
+    const bool          requestDec = (CANRX_get_signal(VEH, SWS_requestFluxWeakeningCurrentDec, &amp;request) == CANRX_MESSAGE_VALID) &amp;&amp;
+                                     (request == CAN_DIGITALSTATUS_ON);
+    const int16_t       requestSum = (int16_t)((requestInc ? 1 : 0) - (requestDec ? 1 : 0));
+
+    if (!mcManager_data.clear_faults &amp;&amp; !mcManager_data.calibrating)
+    {
+        updateFluxWeakeningCurrentRequest(requestSum);
+    }
+}
+
+/******************************************************************************
+ *                       P U B L I C  F U N C T I O N S
+ ******************************************************************************/
+
+float32_t mcManager_getTorqueCommand(void)
+{
+    return mcManager_data.torque_command.y_n;
+}
+
+float32_t mcManager_getAxleRPM(void)
+{
+    return mcManager_data.axle_rpm;
+}
+
+CAN_pm100dxDirectionCommand_E mcManager_getDirectionCommand(void)
+{
+    switch (mcManager_data.direction)
+    {
+        case MCMANAGER_REVERSE:
+            return MC_COMMAND_REVERSE;
+
+        default:
+            return MC_COMMAND_FORWARD;
+    }
+}
+
+CAN_pm100dxEnableState_E mcManager_getEnableCommand(void)
+{
+    CAN_pm100dxEnableState_E          ret               = CAN_PM100DXENABLESTATE_DISABLED;
+    CAN_pm100dxInverterLockoutState_E inverter_lock_out = CAN_PM100DXINVERTERLOCKOUTSTATE_CANNOT_BE_ENABLED;
+
+    const bool                        lockout_valid     = CANRX_get_signal(VEH, PM100DX_inverterEnableLockout, &amp;inverter_lock_out) == CANRX_MESSAGE_VALID;
+
+    if (!lockout_valid || (inverter_lock_out == CAN_PM100DXINVERTERLOCKOUTSTATE_CANNOT_BE_ENABLED))
+    {
+        return CAN_PM100DXENABLESTATE_DISABLED;
+    }
+
+    switch (mcManager_data.enable)
+    {
+        case MCMANAGER_ENABLE:
+            ret = CAN_PM100DXENABLESTATE_ENABLED;
+            break;
+
+        default:
+            ret = CAN_PM100DXENABLESTATE_DISABLED;
+            break;
+    }
+
+    return ret;
+}
+
+float32_t mcManager_getTorqueLimit(void)
+{
+    return mcManager_data.torque_limit;
+}
+
+float32_t mcManager_getTsCapTemperatureDegC(void)
+{
+    return mcManager_data.tempTsCap;
+}
+
+uint8_t mcManager_getResolverCalibrationAttempts(void)
+{
+    return calibrationData.attempts;
+}
+
+float32_t mcManager_getResolverCalibrationConfiguredAngleDeg(void)
+{
+    return calibrationData.angleConfigured;
+}
+
+float32_t mcManager_getResolverCalibrationDeltaFilteredMeasuredDeg(void)
+{
+    return lib_simpleFilter_cumAvgF_average(&amp;calibrationData.deltaFilteredMeasuredAvg);
+}
+
+float32_t mcManager_getFluxWeakeningCurrent(void)
+{
+    return eepromParameters[EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT].savedValid ?
+           eepromRawToValue(EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT,
+                            eepromParameters[EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT].savedRaw) :
+           0.0f;
+}
+float32_t mcManager_getvcRearTorqueLimit(void)
+{
+    return mcManager_data.vcRear_torqueLimitCurrent;
+}
+
+bool mcManager_startResolverCalibration(void)
+{
+    bool eepromBusy = eepromCommandQueue.queued || CANTX_inject_pending(VEH, TOOLING_mcEepromCommand);
+    bool ret        = false;
+
+    for (uint8_t i = 0U; i &lt; (uint8_t)EEPROM_PARAMETER_COUNT; i++)
+    {
+        eepromBusy |= eepromParameters[(eepromParameter_E)i].transmitPending;
+    }
+
+    if (!mcManager_data.calibrating &amp;&amp; !mcManager_data.clear_faults &amp;&amp;
+        (app_vehicleState_getState() == VEHICLESTATE_ON_HV) &amp;&amp;
+        !eepromBusy
+        )
+    {
+        ret                             = true;
+        mcManager_data.calibrating      = true;
+        calibrationData.state           = REQUEST_PARAMETER;
+        calibrationData.attempts        = 0U;
+        calibrationData.angleConfigured = 0.0f;
+        lib_simpleFilter_cumAvgF_clear(&amp;calibrationData.deltaFilteredMeasuredAvg);
+    }
+
+    return ret;
+}
+
+bool mcManager_testResolverCalibration(void)
+{
+    const bool success = mcManager_startResolverCalibration();
+
+    if (success)
+    {
+        mcManager_data.testCalibration = true;
+    }
+
+    return success;
+}
+
+bool mcManager_isResolverCalibrating(void)
+{
+    return mcManager_data.calibrating;
+}
+
+bool mcManager_requestContactorsOpen(void)
+{
+    return mcManager_data.calibrating &amp;&amp; (calibrationData.state == SAMPLE);
+}
+
+static void mcManager_init(void)
+{
+    memset(&amp;mcManager_data,       0x00, sizeof(mcManager_data));
+    memset(&amp;currentFluxWeakening, 0x00, sizeof(currentFluxWeakening));
+    memset(eepromParameters,      0x00, sizeof(eepromParameters));
+    memset(&amp;eepromCommandQueue,   0x00, sizeof(eepromCommandQueue));
+
+    drv_timer_init(&amp;calibrationData.timerPause);
+    drv_timer_init(&amp;currentFluxWeakening.timerChange);
+    drv_timer_init(&amp;eepromBootReadDelay);
+    drv_timer_start(&amp;eepromBootReadDelay, EEPROM_BOOT_READ_DELAY_MS);
+    mcManager_data.torque_command.y_n                                       = 0.0f;
+    mcManager_data.torque_command.maxStepDelta                              = RAMPRATE_NM_PER_S / 100;
+    mcManager_data.torque_limit                                             = 0.0f;
+    mcManager_data.direction                                                = MCMANAGER_FORWARD;
+    mcManager_data.enable                                                   = MCMANAGER_DISABLE;
+    mcManager_data.last_contactor_state                                     = CAN_PRECHARGECONTACTORSTATE_SNA;
+    mcManager_data.clear_faults                                             = false;
+
+    eepromParameters[EEPROM_PARAMETER_FLUX_WEAKENING_CURRENT].readRequested = true;
+    mcManager_data.vcRear_torqueLimitCurrent                                = 0.0;
+}
+
+static void mcManager_periodic_100Hz(void)
+{
+    float32_t                     torque_command    = 0.0f;
+    mcManager_enable_E            enable            = MCMANAGER_DISABLE;
+    CAN_prechargeContactorState_E contactor_state   = CAN_PRECHARGECONTACTORSTATE_SNA;
+    int16_t                       motor_rpm         = 0;
+    bool                          speed_valid       = false;
+    bool                          miaBms            = false;
+    bool                          discharge_valid   = false;
+    bool                          voltage_valid     = false;
+    float32_t                     BMSB_maxDischarge = 0.0f;
+    float32_t                     BMSB_voltage      = 0.0f;
+
+    eepromHandleResponses();
+
+    speed_valid     = CANRX_get_signal(VEH, PM100DX_motorSpeedCritical, &amp;motor_rpm) == CANRX_MESSAGE_VALID;
+    miaBms          = CANRX_get_signal(VEH, BMSB_packContactorState, &amp;contactor_state) != CANRX_MESSAGE_VALID;
+    discharge_valid = CANRX_get_signal(VEH, BMSB_maxDischarge, &amp;BMSB_maxDischarge) == CANRX_MESSAGE_VALID;
+    voltage_valid   = CANRX_get_signal(VEH, BMSB_packVoltage, &amp;BMSB_voltage) == CANRX_MESSAGE_VALID;
+    app_faultManager_setFaultState(FM_FAULT_VCREAR_MIAMC, !speed_valid);
+
+    bool       mcFaulted = app_faultManager_getNetworkedFault_anySet(VEH, PM100DX_faults);
+    app_faultManager_setFaultState(FM_FAULT_VCREAR_MCFAULTED, mcFaulted);
+    const bool miaFront  = CANRX_validate(VEH, VCFRONT_torqueManager) != CANRX_MESSAGE_VALID;
+    const bool miaPdu    = CANRX_validate(VEH, VCPDU_vehicleState) != CANRX_MESSAGE_VALID;
+    app_faultManager_setFaultState(FM_FAULT_VCREAR_MIAVCFRONT,            miaFront);
+    app_faultManager_setFaultState(FM_FAULT_VCREAR_MIAVCPDU,              miaPdu);
+    app_faultManager_setFaultState(FM_FAULT_VCREAR_MIABMS,                miaBms);
+    app_faultManager_setFaultState(FM_FAULT_VCREAR_MCCALIBRATINGRESOLVER, mcManager_data.calibrating);
+    mcManager_data.tempTsCap = drv_tempSensors_getChannelTemperatureDegC(DRV_TEMPSENSORS_CHANNEL_TS_CAP);
+
+    motor_rpm                = (int16_t)((motor_rpm &lt; 0) ? -motor_rpm : motor_rpm);
+    mcManager_data.axle_rpm  = (uint16_t)(motor_rpm / DRIVETRAIN_MULTIPLIER);
+    if (speed_valid &amp;&amp; discharge_valid &amp;&amp; voltage_valid &amp;&amp; (motor_rpm &gt; 0))
+    {
+        mcManager_data.vcRear_torqueLimitCurrent = BMSB_voltage * BMSB_maxDischarge / (RPM_TO_RAD_P_S((float32_t)motor_rpm));
+    }
+    else
+    {
+        mcManager_data.vcRear_torqueLimitCurrent = MCMANAGER_TORQUE_LIMIT;
+    }
+    switch (app_vehicleState_getState())
+    {
+        case VEHICLESTATE_TS_RUN:
+        {
+            CAN_torqueManagerState_E manager_state = CAN_TORQUEMANAGERSTATE_SNA;
+
+            const bool               command_valid = CANRX_get_signal(VEH, VCFRONT_torqueRequest, &amp;torque_command) == CANRX_MESSAGE_VALID;
+            (void)CANRX_get_signal(VEH, VCFRONT_torqueManagerState, &amp;manager_state);
+
+            if (!mcManager_data.lash_enabled)
+            {
+                if ((speed_valid &amp;&amp;
+                     ((motor_rpm &gt; 2 * LASH_TORQUE_RPM_ENABLE) ||
+                      (motor_rpm &lt; 2 * -LASH_TORQUE_RPM_ENABLE))) &amp;&amp;
+                    (torque_command &gt; LASH_TORQUE)
+                    )
+                {
+                    mcManager_data.lash_enabled = true;
+                }
+            }
+            else if (!speed_valid ||
+                     ((motor_rpm &lt; LASH_TORQUE_RPM_DISABLE) &amp;&amp;
+                      (motor_rpm &gt; -LASH_TORQUE_RPM_DISABLE))
+                     )
+            {
+                mcManager_data.lash_enabled = false;
+            }
+
+            if (command_valid &amp;&amp; (manager_state == CAN_TORQUEMANAGERSTATE_ACTIVE))
+            {
+                enable = MCMANAGER_ENABLE;
+                break;
+            }
+            torque_command = 0.0f;
+            enable         = MCMANAGER_DISABLE;
+        }
+        break;
+
+        case VEHICLESTATE_ON_HV:
+        {
+            mcManager_data.lash_enabled = false;
+            if ((mcManager_data.last_contactor_state != CAN_PRECHARGECONTACTORSTATE_HVP_CLOSED) &amp;&amp;
+                (contactor_state == CAN_PRECHARGECONTACTORSTATE_HVP_CLOSED)
+                )
+            {
+                mcManager_data.clear_faults = true;
+            }
+            if (mcManager_data.clear_faults)
+            {
+                if (!eepromCommandQueue.queued)
+                {
+                    eepromCommandQueue.address  = CAN_PM100DXEEPROMADDRESS_FAULT_CLEAR;
+                    eepromCommandQueue.command  = CAN_PM100DXEEPROMRWCOMMAND_WRITE;
+                    eepromCommandQueue.rawData  = 0;
+                    eepromCommandQueue.queued   = true;
+                    mcManager_data.clear_faults = false;
+                }
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    evaluateFluxWeakeningCurrent();
+
+    // Verify calibration is still valid
+    if (mcManager_data.calibrating)
+    {
+        if ((app_vehicleState_getState() != VEHICLESTATE_ON_HV) ||
+            (calibrationData.attempts &gt; (3U + (mcManager_data.testCalibration ? 1U : 0U)))
+            )
+        {
+            calibrationData.state          = REQUEST_PARAMETER;
+            mcManager_data.calibrating     = false;
+            mcManager_data.testCalibration = false;
+            app_faultManager_setFaultState(FM_FAULT_VCREAR_MCCALIBRATINGRESOLVERFAILED, true);
+        }
+    }
+
+    if (mcManager_data.calibrating)
+    {
+        switch (calibrationData.state)
+        {
+            case REQUEST_PARAMETER:
+            {
+                drv_timer_start(&amp;calibrationData.timerPause, CALIBRATION_PAUSE_TIME_MS);
+                calibrationData.parameterUpdateCount                          = eepromParameters[EEPROM_PARAMETER_GAMMA_ADJUST].updateCount;
+                eepromParameters[EEPROM_PARAMETER_GAMMA_ADJUST].readRequested = true;
+                calibrationData.state                                         = READ_PARAMETER;
+            }
+            break;
+
+            case READ_PARAMETER:
+            {
+                if (eepromParameters[EEPROM_PARAMETER_GAMMA_ADJUST].updateCount != calibrationData.parameterUpdateCount)
+                {
+                    calibrationData.state             = PAUSE;
+                    mcManager_data.torque_command.y_n = 0.0f;
+                }
+            }
+            break;
+
+            case PAUSE:
+                if (drv_timer_getState(&amp;calibrationData.timerPause) == DRV_TIMER_EXPIRED)
+                {
+                    drv_timer_start(&amp;calibrationData.timerPause, CALIBRATION_SPIN_TIMEOUT_MS);
+                    calibrationData.state = SPIN_MOTOR;
+                }
+                break;
+
+            case SPIN_MOTOR:
+            {
+                if (drv_timer_getState(&amp;calibrationData.timerPause) == DRV_TIMER_EXPIRED)
+                {
+                    drv_timer_stop(&amp;calibrationData.timerPause);
+                    calibrationData.state      = REQUEST_PARAMETER;
+                    mcManager_data.calibrating = false;
+                    app_faultManager_setFaultState(FM_FAULT_VCREAR_MCCALIBRATINGRESOLVERFAILED, true);
+                    break;
+                }
+                lib_simpleFilter_cumAvgF_clear(&amp;calibrationData.deltaFilteredMeasuredAvg);
+                enable = MCMANAGER_ENABLE;
+                if ((contactor_state == CAN_PRECHARGECONTACTORSTATE_HVP_CLOSED) &amp;&amp; (mcManager_data.torque_command.y_n &lt; CALIBRATION_TORQUE_REQUEST_NM))
+                {
+                    torque_command  = mcManager_data.torque_command.y_n;
+                    torque_command += 1;
+                }
+
+                if (motor_rpm &gt; 1500)
+                {
+                    calibrationData.state             = SAMPLE;
+                    mcManager_data.torque_command.y_n = 0.0f;
+                }
+            }
+            break;
+
+            case SAMPLE:
+            {
+                float32_t deltaResolver = 0;
+                (void)CANRX_get_signal(VEH, PM100DX_deltaResolverFiltered, &amp;deltaResolver);
+
+                if (motor_rpm &lt; 1000)
+                {
+                    const float32_t targetDelta      = MOTOR_BACKWARDS ? -90.0f : 90.0f;
+                    const float32_t measuredDelta    = lib_simpleFilter_cumAvgF_average(&amp;calibrationData.deltaFilteredMeasuredAvg);
+                    const float32_t calibrationDelta = measuredDelta - targetDelta;
+
+                    if (calibrationData.deltaFilteredMeasuredAvg.count &lt; 5)
+                    {
+                        calibrationData.state = SPIN_MOTOR;
+                        break;
+                    }
+
+                    if ((calibrationDelta &lt; 0.5) &amp;&amp; (calibrationDelta &gt; -0.5))
+                    {
+                        if (mcManager_data.testCalibration)
+                        {
+                            calibrationData.state          = REQUEST_PARAMETER;
+                            mcManager_data.calibrating     = false;
+                            mcManager_data.testCalibration = false;
+                            app_faultManager_setFaultState(FM_FAULT_VCREAR_MCCALIBRATINGRESOLVERFAILED, false);
+                        }
+                        else
+                        {
+                            mcManager_data.testCalibration = true;
+                            calibrationData.state          = SPIN_MOTOR;
+                            calibrationData.attempts++;
+                        }
+                        break;
+                    }
+                    else if (mcManager_data.testCalibration)
+                    {
+                        calibrationData.state          = REQUEST_PARAMETER;
+                        mcManager_data.calibrating     = false;
+                        mcManager_data.testCalibration = false;
+                        app_faultManager_setFaultState(FM_FAULT_VCREAR_MCCALIBRATINGRESOLVERFAILED, true);
+                        break;
+                    }
+                    else
+                    {
+                        eepromParameterState_S * const state            = &amp;eepromParameters[EEPROM_PARAMETER_GAMMA_ADJUST];
+                        const bool                     writeOutstanding = state-&gt;writeRequested ||
+                                                                          (state-&gt;transmitPending &amp;&amp;
+                                                                           (state-&gt;transmittedCommand == CAN_PM100DXEEPROMRWCOMMAND_WRITE));
+                        const int16_t                  config           = eepromValueToRaw(EEPROM_PARAMETER_GAMMA_ADJUST,
+                                                                                           calibrationDelta + calibrationData.angleConfigured);
+
+                        if (!writeOutstanding &amp;&amp; (contactor_state == CAN_PRECHARGECONTACTORSTATE_OPEN))
+                        {
+                            state-&gt;requestedRaw              = config;
+                            state-&gt;requestValid              = true;
+                            state-&gt;writeRequested            = !state-&gt;savedValid || (state-&gt;savedRaw != state-&gt;requestedRaw);
+                            calibrationData.state            = SPIN_MOTOR;
+                            calibrationData.angleConfigured += calibrationDelta;
+                            calibrationData.attempts++;
+                        }
+                    }
+                }
+                else if ((motor_rpm &lt; 1100) &amp;&amp; (contactor_state == CAN_PRECHARGECONTACTORSTATE_OPEN))
+                {
+                    lib_simpleFilter_cumAvgF_increment(&amp;calibrationData.deltaFilteredMeasuredAvg, deltaResolver);
+                }
+            }
+
+            default:
+                break;
+        }
+    }
+
+#if FEATURE_IS_ENABLED(FEATURE_REVERSE)
+    CAN_gear_E direction       = CAN_GEAR_FORWARD;
+    const bool direction_valid = CANRX_get_signal(VEH, VCFRONT_gear, &amp;direction) == CANRX_MESSAGE_VALID;
+    if (direction_valid &amp;&amp; (direction == CAN_GEAR_REVERSE) &amp;&amp; !mcManager_data.calibrating)
+    {
+        mcManager_data.torque_limit = (enable == MCMANAGER_ENABLE) ? MCMANAGER_TORQUE_LIMIT_REVERSE : 0.0f;
+        mcManager_data.direction    = MCMANAGER_REVERSE;
+    }
+    else
+#endif
+    {
+        float32_t activeTorque = !mcManager_data.calibrating ? MCMANAGER_TORQUE_LIMIT : CALIBRATION_TORQUE_REQUEST_NM;
+        mcManager_data.torque_limit = (enable == MCMANAGER_ENABLE) ? activeTorque : 0.0f;
+        mcManager_data.direction    = MCMANAGER_FORWARD;
+    }
+
+    const bool      isRegenTorque = torque_command &lt; 0.0f;
+    const float32_t min_torque    = mcManager_data.lash_enabled ? (!isRegenTorque ? LASH_TORQUE : -LASH_TORQUE) : 0.0f;
+    const float32_t maxLimit      = !isRegenTorque ? mcManager_data.torque_limit : min_torque;
+    const float32_t minLimit      = !isRegenTorque ? min_torque : -mcManager_data.torque_limit;
+
+    mcManager_data.last_contactor_state = contactor_state;
+    mcManager_data.enable               = enable;
+    const float32_t effectiveMaxLimit = (!isRegenTorque &amp;&amp; (mcManager_data.vcRear_torqueLimitCurrent &lt; maxLimit)) ? mcManager_data.vcRear_torqueLimitCurrent : maxLimit;
+    torque_command                      = SATURATE(minLimit, torque_command, effectiveMaxLimit);
+    lib_rateLimit_linear_update(&amp;mcManager_data.torque_command, torque_command);
+
+    eepromTransmitPending();
+}
+
+/******************************************************************************
+ *                           P U B L I C  V A R S
+ ******************************************************************************/
+
+const ModuleDesc_S mcManager_desc = {
+    .moduleInit        = &amp;mcManager_init,
+    .periodic100Hz_CLK = &amp;mcManager_periodic_100Hz,
+};</code></pre>
+      </details>
+      <details class="code-details">
+        <summary>Show BMS.c source</summary>
+        <pre class="code-block code-block--scroll"><code>/**
+ * @file BMS.c
+ * @brief  Source code for BMS manager
+ */
+
+/******************************************************************************
+ *                             I N C L U D E S
+ ******************************************************************************/
+
+#include "BMS.h"
+
+#include &lt;string.h&gt;
+
+#include "app_faultManager.h"
+#include "batteryModel.h"
+#include "drv_inputAD.h"
+#include "drv_outputAD.h"
+#include "drv_timer.h"
+#include "drv_userInput.h"
+#include "ENV.h"
+#include "HW.h"
+#include "IMD.h"
+#include "Module.h"
+#include "SOC_Interpolation_Maps.h"
+#include "SystemConfig.h"
+
+#include "CELL.h"
+#include "FeatureDefines_generated.h"
+#include "lib_utility.h"
+#include "Yamcan.h"
+
+/******************************************************************************
+ *                              D E F I N E S
+ ******************************************************************************/
+
+#define CURRENT_SENSE_V_per_A                          -0.0025f
+// Precharge is complete at ~3x the precharge time constant
+#define PRECHARGE_MIN_TIME_MS                          (BMS_PRECHARGE_RESISTANCE * BMS_DC_LINK_CAPACITANCE * 3 * 1000)
+
+#define PACK_CS_0_OFFSET                               0.0f
+
+#define LOAD_CURRENT_THRESHOLD                         5
+#define BMS_CONFIGURED_DERATING_DELAY                  1000 // [ms]
+#define STANDARD_CHARGE_CURRENT                        BMS_MAX_CONT_CHARGE_CURRENT
+
+#define CONTACTOR_SOH_LOW_WARN_THRESHOLD_PERCENTAGE    0.1f
+
+#define BALANCING_DELTA_CUTOFF                         0.005f   // [V]
+#define BALANCING_MIN_VOLTAGE_ALLOWED                  3.00f    // [V]
+#define MAX_POWER                                      80000.0f // Watts
+
+#define TRICKLE_CHARGE_CURRENT                         (1.0f * BMS_CONFIGURED_PARALLEL_CELLS)
+#define SLOW_TRICKLE_CHARGE_CURRENT                    0.25f
+#define TRICKLE_CHARGE_VOLTAGE                         4.15f
+#define SLOW_TRICKLE_CHARGE_VOLTAGE                    4.175f
+
+/******************************************************************************
+ *                           P U B L I C  V A R S
+ ******************************************************************************/
+
+BMSB_S BMS;
+
+batteryModel_S bm = {
+    .config             = {
+        .Rnoise         =                   0.05f,
+        .Qnoise         = { { { 7e-8f,                   0.0f, 0.0f }, { 0.0f, 6e-5f, 0.0f }, { 0.0f, 0.0f, 6e-5f } } },
+        .Pinit          = { { { 1e-4f,                   0.0f, 0.0f }, { 0.0f, 1e-4f, 0.0f }, { 0.0f, 0.0f, 1e-4f } } },
+        .cellAH         = BMS_CELL_RATED_AMPHOURS,
+        .minCellVoltage =                    2.4f, // TODO: Improve top end live cell voltage
+        .maxCellVoltage =                    4.2f, // TODO: Improve bottom end live cell voltage
+        .socMap         = &amp;SOC_OCV_FUNC,
+        .docvMap        = &amp;SOC_dOCV_FUNC,
+        .RiMapDischarge = &amp;SOC_Ri_DISCHARGE_FUNC,
+        .R1MapDischarge = &amp;SOC_R1_DISCHARGE_FUNC,
+        .C1MapDischarge = &amp;SOC_C1_DISCHARGE_FUNC,
+        .R2MapDischarge = &amp;SOC_R2_DISCHARGE_FUNC,
+        .C2MapDischarge = &amp;SOC_C2_DISCHARGE_FUNC,
+        .RiMapCharge    = &amp;SOC_Ri_CHARGE_FUNC,
+        .R1MapCharge    = &amp;SOC_R1_CHARGE_FUNC,
+        .C1MapCharge    = &amp;SOC_C1_CHARGE_FUNC,
+        .R2MapCharge    = &amp;SOC_R2_CHARGE_FUNC,
+        .C2MapCharge    = &amp;SOC_C2_CHARGE_FUNC,
+    }
+};
+
+/******************************************************************************
+ *                         P R I V A T E  V A R S
+ ******************************************************************************/
+
+static drv_timer_S precharge_timer;
+
+/******************************************************************************
+ *                     P R I V A T E  F U N C T I O N S
+ ******************************************************************************/
+
+static void chargeLimit(BMSB_S* bms, batteryModel_S* batteryModel)
+{
+    const bool      trickleCharge = bms-&gt;voltages.max &gt; TRICKLE_CHARGE_VOLTAGE;
+    const float32_t chargeCurrent = trickleCharge ?
+                                    (bms-&gt;balancing &amp;&amp; (bms-&gt;voltages.max &gt; SLOW_TRICKLE_CHARGE_VOLTAGE) ? SLOW_TRICKLE_CHARGE_CURRENT : TRICKLE_CHARGE_CURRENT) :
+                                    batteryModel-&gt;chargeLimit * BMS_CONFIGURED_PARALLEL_CELLS;
+
+
+    if ((bms-&gt;max_temp &gt; 60.0f) || bms-&gt;fault)
+    {
+        bms-&gt;charge_limit = 0;
+        return;
+    }
+
+    bms-&gt;charge_limit = SATURATE(0.0f, chargeCurrent, batteryModel-&gt;chargeLimit * BMS_CONFIGURED_PARALLEL_CELLS);
+
+    if (bms-&gt;max_temp &gt;= 48)
+    {
+        bms-&gt;charge_limit += -((bms-&gt;max_temp - 48.0f) / 12.0f) * STANDARD_CHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS;
+    }
+
+    if (bms-&gt;charge_limit &lt; 0.0f)
+    {
+        bms-&gt;charge_limit = 0.0f;
+    }
+    if (bms-&gt;charge_limit &gt; STANDARD_CHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS)
+    {
+        bms-&gt;charge_limit = STANDARD_CHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS;
+    }
+}
+
+static void dischargeLimit(BMSB_S* bms, batteryModel_S* batteryModel)
+{
+    if ((bms-&gt;max_temp &gt; 60.0f) || bms-&gt;fault)
+    {
+        bms-&gt;discharge_limit = 0.0f;
+        return;
+    }
+
+    bms-&gt;discharge_limit = fabsf(batteryModel-&gt;dischargeLimit) * BMS_CONFIGURED_PARALLEL_CELLS;
+
+    if (bms-&gt;max_temp &gt;= 48.0f)
+    {
+        bms-&gt;discharge_limit += -((bms-&gt;max_temp - 48.0f) / 12.0f) * BMS_MAX_CONT_DISCHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS;
+    }
+
+    if (bms-&gt;discharge_limit &lt; 0.0f)
+    {
+        bms-&gt;discharge_limit = 0.0f;
+    }
+    if (bms-&gt;discharge_limit &gt; BMS_MAX_CONT_DISCHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS)
+    {
+        bms-&gt;discharge_limit = BMS_MAX_CONT_DISCHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS;
+    }
+    if ((bms-&gt;discharge_limit * bms-&gt;pack_voltage_calculated) &gt; MAX_POWER)
+    {
+        bms-&gt;discharge_limit = MAX_POWER / bms-&gt;pack_voltage_calculated;
+    }
+}
+
+static void openShutdown(void)
+{
+    drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_STATUS_BMS, DRV_IO_INACTIVE);
+}
+
+static void closeShutdown(void)
+{
+    drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_STATUS_BMS, DRV_IO_ACTIVE);
+}
+
+static void openAllContactors(void)
+{
+    drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_AIR,    DRV_IO_INACTIVE);
+    drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_PRECHG, DRV_IO_INACTIVE);
+    BMS.contacts = BMS_CONTACTORS_OPEN;
+}
+
+static void cycleContacts(void)
+{
+    if (BMS.contacts == BMS_CONTACTORS_OPEN)
+    {
+        drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_PRECHG, DRV_IO_ACTIVE);
+        BMS.contacts = BMS_CONTACTORS_PRECHARGE;
+    }
+    else if (BMS.contacts == BMS_CONTACTORS_PRECHARGE)
+    {
+        drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_AIR, DRV_IO_ACTIVE);
+        BMS.contacts = BMS_CONTACTORS_CLOSED;
+    }
+    else if (BMS.contacts == BMS_CONTACTORS_CLOSED)
+    {
+        drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_PRECHG, DRV_IO_INACTIVE);
+        BMS.contacts = BMS_CONTACTORS_HVP_CLOSED;
+    }
+}
+
+static void getSegmentStats(BMSB_S* bms, bool* workerBmsFault, bool* workerTempFault)
+{
+    bms-&gt;fault                   = false;
+    bms-&gt;pack_voltage_calculated = 0.0f;
+    bms-&gt;pack_voltage_measured   = 0.0f;
+    *workerBmsFault              = false;
+    *workerTempFault             = false;
+    bms-&gt;voltages.max            = 0.0f;
+    bms-&gt;voltages.min            = 5.0f;
+    bms-&gt;max_temp                = 0.0f;
+    bms-&gt;charge_limit            = BMS_MAX_CONT_CHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS;
+    bms-&gt;discharge_limit         = BMS_MAX_CONT_DISCHARGE_CURRENT * BMS_CONFIGURED_PARALLEL_CELLS;
+
+    for (uint8_t i = 0; i &lt; CAN_DUPLICATENODE_BMSW_COUNT; i++)
+    {
+        CAN_flag_E faultBMS     = 0U;
+        CAN_flag_E faultTemp    = 0U;
+        const bool worker_valid = CANRX_get_signalDuplicate(VEH, BMSW_faultBMS, &amp;faultBMS, i) == CANRX_MESSAGE_VALID;
+        (void)CANRX_get_signalDuplicate(VEH, BMSW_faultTemp, &amp;faultTemp, i);
+        if (worker_valid == false)
+        {
+            continue;
+        }
+
+        const bool worker_bms_fault  = faultBMS == CAN_FLAG_SET;
+        const bool worker_temp_fault = faultTemp == CAN_FLAG_SET;
+
+        *workerBmsFault  |= worker_bms_fault;
+        *workerTempFault |= worker_temp_fault;
+        bms-&gt;fault       |= worker_bms_fault || worker_temp_fault;
+
+        float32_t pack_voltage = 0.0f, max_voltage = 0.0f, min_voltage = 0.0f, max_temp = 0.0f;
+        UNUSED(CANRX_get_signalDuplicate(VEH, BMSW_segmentVoltage, &amp;pack_voltage, i));
+        UNUSED(CANRX_get_signalDuplicate(VEH, BMSW_voltageMax, &amp;max_voltage, i));
+        UNUSED(CANRX_get_signalDuplicate(VEH, BMSW_voltageMin, &amp;min_voltage, i));
+        UNUSED(CANRX_get_signalDuplicate(VEH, BMSW_tempMax, &amp;max_temp, i));
+
+        bms-&gt;pack_voltage_calculated += pack_voltage;
+
+        bms-&gt;voltages.max             = (max_voltage &gt; bms-&gt;voltages.max) ? max_voltage : bms-&gt;voltages.max;
+        bms-&gt;voltages.min             = (min_voltage &lt; bms-&gt;voltages.min) ? min_voltage : bms-&gt;voltages.min;
+        bms-&gt;max_temp                 = (max_temp &gt; bms-&gt;max_temp) ? max_temp : bms-&gt;max_temp;
+    }
+
+    bms-&gt;connected_segments = 0;
+    for (uint8_t i = 0; i &lt; CAN_DUPLICATENODE_BMSW_COUNT; i++)
+    {
+        if (CANRX_validateDuplicate(VEH, BMSW_criticalData, i) == CANRX_MESSAGE_VALID)
+        {
+            bms-&gt;connected_segments++;
+        }
+    }
+}
+
+static bool workerFaultLatchResetRequested(void)
+{
+    return drv_inputAD_getDigitalActiveState(DRV_INPUTAD_DIGITAL_BMS_IMD_RESET) == DRV_IO_ACTIVE;
+}
+
+static bool updateLatchedWorkerFault(bool latched, bool faulted, bool resetRequested)
+{
+    if (faulted)
+    {
+        return true;
+    }
+    else if (resetRequested)
+    {
+        return false;
+    }
+
+    return latched;
+}
+
+static bool checkBmsFaulted(void)
+{
+    const bool bmsFault         = BMS.fault;
+    const bool tsmsOpen         = !drv_userInput_buttonPressed(USERINPUT_SWITCH_TSMS);
+    const bool imdOpen          = drv_inputAD_getLogicLevel(DRV_INPUTAD_DIGITAL_OK_HS) == DRV_IO_LOGIC_LOW;
+    const bool timeout          = BMS_SFT_checkMCTimeout() &amp;&amp; BMS_SFT_checkElconChargerTimeout() &amp;&amp; BMS_SFT_checkBrusaChargerTimeout();
+    const bool openContactors   = bmsFault || tsmsOpen || timeout;
+
+    const bool underLoad        = (BMS.pack_current &gt; LOAD_CURRENT_THRESHOLD) || (BMS.pack_current &lt; -LOAD_CURRENT_THRESHOLD);
+    const bool contactorsClosed = (BMS.contacts == BMS_CONTACTORS_PRECHARGE) ||
+                                  (BMS.contacts == BMS_CONTACTORS_CLOSED) ||
+                                  (BMS.contacts == BMS_CONTACTORS_HVP_CLOSED);
+
+    app_faultManager_setFaultState(FM_FAULT_BMSB_CONTACTORSOPENEDUNDERLOAD, openContactors &amp;&amp; underLoad);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_BMSFAULTOPENEDCONTACTORS,  bmsFault &amp;&amp; contactorsClosed);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_TSMSOPENEDCONTACTORS,      tsmsOpen &amp;&amp; contactorsClosed);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_TIMEOUTOPENEDCONTACTORS,   timeout &amp;&amp; contactorsClosed);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_BMSFAULT,                  bmsFault);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_IMDNOK,                    imdOpen);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_TIMEOUT,                   timeout);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_CONTACTORLOWSOHHVP,        BMSB_getContactorSohHvp() &lt; CONTACTOR_SOH_LOW_WARN_THRESHOLD_PERCENTAGE);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_CONTACTORLOWSOHHVN,        BMSB_getContactorSohHvn() &lt; CONTACTOR_SOH_LOW_WARN_THRESHOLD_PERCENTAGE);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_CONTACTORLOWSOHPRECHARGE,  BMSB_getContactorSohPrecharge() &lt; CONTACTOR_SOH_LOW_WARN_THRESHOLD_PERCENTAGE);
+
+    app_faultManager_setFaultState(FM_FAULT_BMSB_WORKERBMSFAULT,            BMS.worker_bms_fault_latched);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_WORKERTEMPFAULT,           BMS.worker_temp_fault_latched);
+    app_faultManager_setFaultState(FM_FAULT_BMSB_WORKERDISCONNECTED,        BMS.worker_disconnected_latched);
+
+    if (bmsFault)
+    {
+        openShutdown();
+    }
+    else
+    {
+        closeShutdown();
+    }
+#if APP_VARIANT_ID == 0U
+    if (IMD_getState() == IMD_HEALTHY)
+    {
+        drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_STATUS_IMD, DRV_IO_ACTIVE);
+    }
+    else
+    {
+        drv_outputAD_setDigitalActiveState(DRV_OUTPUTAD_DIGITAL_STATUS_IMD, DRV_IO_INACTIVE);
+    }
+#endif
+
+    return openContactors;
+}
+
+/******************************************************************************
+ *                       P U B L I C  F U N C T I O N S
+ ******************************************************************************/
+
+float32_t BMSB_getContactorSohHvp(void)
+{
+    return SATURATE(
+        0.0f,
+        1.0f - ((float32_t)contactor_data.contactorLifetime.contactorHvp / BMSB_CONTACTOR_LIFETIME_HVC43),
+        1.0f);
+}
+
+float32_t BMSB_getContactorSohHvn(void)
+{
+    return SATURATE(
+        0.0f,
+        1.0f - ((float32_t)contactor_data.contactorLifetime.contactorHvn / BMSB_CONTACTOR_LIFETIME_HVC43),
+        1.0f);
+}
+
+float32_t BMSB_getContactorSohPrecharge(void)
+{
+    return SATURATE(
+        0.0f,
+        1.0f - ((float32_t)contactor_data.contactorLifetime.precharge / BMSB_CONTACTOR_LIFETIME_3350_PRECHARGE),
+        1.0f);
+}
+
+uint32_t BMSB_getContactorLifetimeHvp(void)
+{
+    return contactor_data.contactorLifetime.contactorHvp;
+}
+
+uint32_t BMSB_getContactorLifetimeHvn(void)
+{
+    return contactor_data.contactorLifetime.contactorHvn;
+}
+
+uint32_t BMSB_getContactorLifetimePrecharge(void)
+{
+    return contactor_data.contactorLifetime.precharge;
+}
+
+bool BMSB_initSOC(void)
+{
+    if (BMS.pack_voltage_measured &lt;= 1e-6f)
+    {
+        return false;
+    }
+    float32_t soc = SATURATE(0.0f,
+                             lib_interpolation_interpolate(&amp;OCV_SOC_FUNC, BMS.pack_voltage_measured /
+                                                           (BMS_CONFIGURED_SERIES_CELLS * BMS_CONFIGURED_SERIES_SEGMENTS)),
+                             1.0f);
+    batteryModel_setSOC(&amp;bm, soc);
+    current_data.soc = soc;
+    return true;
+}
+
+bool BMS_SFT_checkMCTimeout(void)
+{
+    return(CANRX_validate(VEH, PM100DX_criticalData) != CANRX_MESSAGE_VALID);
+}
+
+bool BMS_SFT_checkBrusaChargerTimeout(void)
+{
+    return(CANRX_validate(VEH, BRUSA513_criticalData) != CANRX_MESSAGE_VALID);
+}
+
+bool BMS_SFT_checkElconChargerTimeout(void)
+{
+    return(CANRX_validate(PRIVBMS, ELCON_criticalData) != CANRX_MESSAGE_VALID);
+}
+
+bool BMS_stopCharging(void)
+{
+    if (drv_inputAD_getLogicLevel(DRV_INPUTAD_DIGITAL_TSMS_CHG) != DRV_IO_LOGIC_HIGH)
+    {
+        return false;
+    }
+
+    BMS.charging_paused = true;
+    return true;
+}
+
+bool BMS_startCharging(void)
+{
+    if (drv_inputAD_getLogicLevel(DRV_INPUTAD_DIGITAL_TSMS_CHG) != DRV_IO_LOGIC_HIGH)
+    {
+        return false;
+    }
+
+    BMS.charging_paused = false;
+    return true;
+}
+
+bool BMS_startBalancing(void)
+{
+    if ((BMS.voltages.min &lt; BALANCING_MIN_VOLTAGE_ALLOWED) ||
+#if FEATURE_IS_DISABLED(FEATURE_NO_TSMS_BALANCING)
+        (drv_inputAD_getLogicLevel(DRV_INPUTAD_DIGITAL_TSMS_CHG) != DRV_IO_LOGIC_HIGH)
+#else
+        false
+#endif
+        )
+    {
+        return false;
+    }
+
+    BMS.balancing = true;
+
+    return true;
+}
+
+bool BMS_stopBalancing(void)
+{
+    if (!BMS.balancing)
+    {
+        return false;
+    }
+
+    BMS.balancing = false;
+    return true;
+}
+
+static void BMS_init(void)
+{
+    memset(&amp;BMS, 0x00, sizeof(BMSB_S));
+    IMD_init();
+    drv_timer_init(&amp;precharge_timer);
+    batteryModel_init(&amp;bm, current_data.soc);
+    BMS.last_step_ms                  = HW_TIM_getTimeMS();
+    BMS.counted_coulombs.last_step_us = HW_TIM_getBaseTick();
+    BMS.counted_coulombs.reset        = true;
+
+    lib_simpleFilter_lpf_calcSmoothingFactor(&amp;BMS.lpfCurrent, 100.0f, 0.001f);
+}
+
+static void BMS10Hz_PRD(void)
+{
+    BMSB_S tmp             = { 0x00 };
+    bool   workerBmsFault  = false;
+    bool   workerTempFault = false;
+
+    getSegmentStats(&amp;tmp, &amp;workerBmsFault, &amp;workerTempFault);
+
+    const bool workerDisconnected = tmp.connected_segments != BMS_CONFIGURED_SERIES_SEGMENTS;
+
+    if (workerDisconnected)
+    {
+        tmp.fault = true;
+    }
+
+    const bool resetWorkerFaults = workerFaultLatchResetRequested();
+
+    BMS.worker_bms_fault_latched    = updateLatchedWorkerFault(BMS.worker_bms_fault_latched, workerBmsFault, resetWorkerFaults);
+    BMS.worker_temp_fault_latched   = updateLatchedWorkerFault(BMS.worker_temp_fault_latched, workerTempFault, resetWorkerFaults);
+    BMS.worker_disconnected_latched = updateLatchedWorkerFault(BMS.worker_disconnected_latched, workerDisconnected, resetWorkerFaults);
+
+    BMS.soc                         = tmp.soc;
+    BMS.fault                       = tmp.fault;
+
+    BMS.connected_segments          = tmp.connected_segments;
+    BMS.pack_voltage_calculated     = tmp.pack_voltage_calculated;
+    BMS.voltages                    = tmp.voltages;
+    BMS.max_temp                    = tmp.max_temp;
+
+    BMS.driveTimeRemaining          = bm.driveTimeRemaining;
+
+    if (BMS.balancing)
+    {
+        BMS.balancing = (BMS.voltages.max - BMS.voltages.min) &gt; BALANCING_DELTA_CUTOFF;
+    }
+}
+
+static void BMS100Hz_PRD(void)
+{
+    CAN_digitalStatus_E contactorOpenRequestState = CAN_DIGITALSTATUS_SNA;
+    const bool          openRequest               = (CANRX_get_signal(VEH, VCREAR_requestContactorsOpen, &amp;contactorOpenRequestState) == CANRX_MESSAGE_VALID) &amp;&amp;
+                                                    (contactorOpenRequestState == CAN_DIGITALSTATUS_ON);
+    const bool          openContactors            = checkBmsFaulted();
+
+    const uint32_t      this_step                 = HW_TIM_getTimeMS();
+    const uint32_t      delta_t                   = this_step - BMS.last_step_ms;
+
+    BMS.last_step_ms = this_step;
+
+    batteryModel_run(&amp;bm, BMS.pack_voltage_measured / (BMS_CONFIGURED_SERIES_CELLS * BMS_CONFIGURED_SERIES_SEGMENTS), BMS.pack_current / BMS_CONFIGURED_PARALLEL_CELLS,
+                     BMS.voltages.min, BMS.voltages.max, (float32_t)delta_t / 1000.0f);
+    current_data.soc = SATURATE(0.0f, batteryModel_getSOC(&amp;bm), 1.0f);
+
+    if (BMS.connected_segments == BMS_CONFIGURED_SERIES_SEGMENTS)
+    {
+        chargeLimit(&amp;BMS, &amp;bm);
+        dischargeLimit(&amp;BMS, &amp;bm);
+        BMS.soc = batteryModel_getSOC(&amp;bm);
+
+        if (BMS.charging_paused)
+        {
+            BMS.charge_limit = 0.0f;
+        }
+    }
+    else
+    {
+        BMS.charge_limit    = 0.0f;
+        BMS.discharge_limit = 0.0f;
+    }
+
+    if (openContactors || openRequest)
+    {
+        openAllContactors();
+        drv_timer_stop(&amp;precharge_timer);
+#if FEATURE_IS_DISABLED(FEATURE_NO_TSMS_BALANCING)
+        BMS.balancing       = false;
+#endif
+        BMS.charging_paused = false;
+    }
+    else
+    {
+        if (drv_inputAD_getLogicLevel(DRV_INPUTAD_DIGITAL_TSMS_CHG) == DRV_IO_LOGIC_HIGH)
+        {
+            if (BMS.contacts == BMS_CONTACTORS_OPEN)
+            {
+                cycleContacts();
+                drv_timer_start(&amp;precharge_timer, PRECHARGE_MIN_TIME_MS);
+                contactor_data.contactorLifetime.contactorHvn++;
+                contactor_data.contactorLifetime.precharge++;
+            }
+            else if ((BMS.contacts == BMS_CONTACTORS_PRECHARGE) || (BMS.contacts == BMS_CONTACTORS_CLOSED))
+            {
+                float32_t  ts_voltage  = 0.0f;
+                float32_t  chg_voltage = 0.0f;
+                const bool mc_valid    = (CANRX_get_signal(VEH, PM100DX_tractiveSystemVoltage, &amp;ts_voltage) == CANRX_MESSAGE_VALID);
+                const bool chg_valid   = (CANRX_get_signal(VEH, BRUSA513_dcBusVoltage, &amp;chg_voltage) == CANRX_MESSAGE_VALID);
+
+                if (chg_valid)
+                {
+                    BMS_startBalancing();
+                }
+
+                if ((((mc_valid == true) &amp;&amp; (ts_voltage &gt; 0.95f * BMS_VPACK_SOURCE)) ||
+                     ((chg_valid == true) &amp;&amp; (chg_voltage &gt; 0.95f * BMS_VPACK_SOURCE))) &amp;&amp;
+                    (drv_timer_getState(&amp;precharge_timer) == DRV_TIMER_EXPIRED)
+                    )
+                {
+                    cycleContacts();
+                    contactor_data.contactorLifetime.contactorHvp++;
+                    lib_nvm_requestWrite(NVM_ENTRYID_CONTACTOR_LIFETIME);
+                }
+            }
+        }
+    }
+}
+
+static void BMS1kHz_PRD(void)
+{
+    const uint64_t this_step  = HW_TIM_getBaseTick();
+    const uint32_t delta_t    = (uint32_t)(this_step - BMS.counted_coulombs.last_step_us);
+
+    float32_t      tmpCurrent = (drv_inputAD_getAnalogVoltage(DRV_INPUTAD_ANALOG_CS) - PACK_CS_0_OFFSET) / CURRENT_SENSE_V_per_A;
+
+    BMS.packCurrentRaw           = tmpCurrent;
+    tmpCurrent                   = lib_simpleFilter_lpf_step(&amp;BMS.lpfCurrent, tmpCurrent);
+    BMS.pack_current             = tmpCurrent;
+    BMS.pack_voltage_measured    = drv_inputAD_getAnalogVoltage(DRV_INPUTAD_ANALOG_VPACK);
+    BMS.pack_voltage_sense_fault = drv_inputAD_getDigitalActiveState(DRV_INPUTAD_DIGITAL_VPACK_DIAG) == DRV_IO_ACTIVE;
+    BMS.packPowerKW              = (BMS.pack_voltage_measured * BMS.pack_current) / 1000.0f;
+
+    // TODO: Update coulomb count in cells
+    if ((BMS.contacts == BMS_CONTACTORS_PRECHARGE) ||
+        (BMS.contacts == BMS_CONTACTORS_HVP_CLOSED) ||
+        (BMS.contacts == BMS_CONTACTORS_CLOSED)
+        )
+    {
+        const float32_t delta_amp_hr = BMS.pack_current * (((float32_t)delta_t) / 1000000.0f) * (1.0f / 3600.0f);
+        BMS.counted_coulombs.reset   = false;
+        BMS.counted_coulombs.amp_hr += delta_amp_hr;
+    }
+    else if (BMS.counted_coulombs.reset == false)
+    {
+        lib_nvm_requestWrite(NVM_ENTRYID_SOC);
+        BMS.counted_coulombs.amp_hr = 0.0f;
+        BMS.counted_coulombs.reset  = true;
+    }
+
+    BMS.counted_coulombs.last_step_us = this_step;
+}
+
+const ModuleDesc_S BMS_desc = {
+    .moduleInit        = &amp;BMS_init,
+    .periodic10Hz_CLK  = &amp;BMS10Hz_PRD,
+    .periodic100Hz_CLK = &amp;BMS100Hz_PRD,
+    .periodic1kHz_CLK  = &amp;BMS1kHz_PRD,
+};</code></pre>
+      </details>
     </section>
   </main>
 

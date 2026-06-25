@@ -5,9 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cooling Design · Andrew Freeman</title>
   <meta name="description" content="Cooling package design for Concordia's electric Formula car: radiator characterization, MoTeC data analysis, and MATLAB modelling.">
+  <link rel="icon" href="favicon.svg">
+  <link rel="canonical" href="https://freeman803.github.io/cooling-package-design.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Cooling Design · Andrew Freeman">
+  <meta property="og:description" content="Cooling package design for Concordia's electric Formula car: radiator characterization, MoTeC data analysis, and MATLAB modelling.">
+  <meta property="og:url" content="https://freeman803.github.io/cooling-package-design.html">
+  <meta property="og:image" content="https://freeman803.github.io/assets/images/cooling/gps-heat-out-orig_orig.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Cooling Design · Andrew Freeman">
+  <meta name="twitter:description" content="Cooling package design for Concordia's electric Formula car: radiator characterization, MoTeC data analysis, and MATLAB modelling.">
+  <meta name="twitter:image" content="https://freeman803.github.io/assets/images/cooling/gps-heat-out-orig_orig.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
   <header class="site-header">
     <div class="site-header__inner">
@@ -28,7 +40,7 @@
   </header>
   <!-- ============ /HEADER ============ -->
 
-  <main class="has-toc">
+  <main class="has-toc" id="main-content">
     <h1 class="page-title">Cooling Design</h1>
     <p class="page-subtitle">Cooling Lead · Concordia Formula Racing</p>
 
@@ -66,13 +78,13 @@ These images show examples of the design work completed for the vehicle cooling 
 To overcome this, we designed and built a custom radiator test rig to experimentally characterize radiator performance under controlled conditions. In parallel, we used MoTeC to analyze real world vehicle data, including coolant temperatures, flow rates, and ambient conditions. We also developed MATLAB simulations to evaluate different cooling scenarios, validate experimental results, and optimize radiator selection and flow requirements.
       </p>
       <div class="image-grid image-grid--gallery">
-        <img src="assets/images/cooling/gps-heat-out-orig_orig.png" alt="Cooling system design work" loading="lazy">
-        <img src="assets/images/cooling/motor-eff-gps-1-orig_orig.png" alt="Cooling system design work" loading="lazy">
-        <img src="assets/images/cooling/screenshot-2025-03-30-120032-orig_orig.png" alt="Cooling system design work" loading="lazy">
-        <img src="assets/images/cooling/screenshot-2025-03-30-120046-orig_orig.png" alt="Cooling system design work" loading="lazy">
-        <img src="assets/images/cooling/screenshot-2025-03-30-120117-orig_orig.png" alt="Cooling system design work" loading="lazy">
-        <img src="assets/images/cooling/screenshot-2026-02-13-211814-orig_orig.jpg" alt="Cooling system design work" loading="lazy">
-        <img src="assets/images/cooling/shared-image-2-orig_orig.jpg" alt="Cooling system design work" loading="lazy">
+        <img src="assets/images/cooling/gps-heat-out-orig_orig.png" alt="GPS-mapped heat-rejection output around the track from MoTeC data" loading="lazy">
+        <img src="assets/images/cooling/motor-eff-gps-1-orig_orig.png" alt="GPS-mapped motor efficiency around the track from MoTeC data" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2025-03-30-120032-orig_orig.png" alt="MATLAB cooling-scenario analysis plot" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2025-03-30-120046-orig_orig.png" alt="Radiator performance characterization plot" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2025-03-30-120117-orig_orig.png" alt="Pump operating-point selection plot" loading="lazy">
+        <img src="assets/images/cooling/screenshot-2026-02-13-211814-orig_orig.jpg" alt="Custom radiator test rig built to characterize radiator performance" loading="lazy">
+        <img src="assets/images/cooling/shared-image-2-orig_orig.jpg" alt="Cooling system components installed on the car" loading="lazy">
       </div>
       <p class="figure-caption">Cooling design work: custom radiator test rig characterization, MoTeC telemetry analysis (coolant temperatures, flow, GPS mapped heat output and motor efficiency), and MATLAB cooling scenario studies used to size the system for the Michigan endurance event.</p>
     </section>
@@ -98,7 +110,7 @@ The objective of this model was to quantify the distribution of pressure losses 
 The second figure shows a simplified system level model developed to directly address pump selection. Instead of resolving individual geometric losses, the complete cooling loop was experimentally tested to obtain total pressure drop versus flow rate. This system curve was then implemented in MATLAB and intersected with the pump performance curves to determine the required operating points. The target flow rate was defined by the thermal analysis, and the model was used to determine the operating conditions necessary for each pump to achieve that requirement.
       </p>
       <div class="image-grid">
-        <img src="assets/images/screenshot-2026-02-13-220708-orig_orig.jpg" alt="Initial MATLAB cooling loop pressure loss model" loading="lazy">
+        <img src="assets/images/screenshot-2026-02-13-220708-orig_orig.jpg" alt="Initial MATLAB cooling-loop pressure-loss model" width="886" height="427" loading="lazy">
       </div>
       <p class="figure-caption">Initial detailed loss model (every bend and diameter change resolved individually). It carried too much uncertainty in the minor loss coefficients, which motivated the simplified system level curve used for final pump selection.</p>
     </section>

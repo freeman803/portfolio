@@ -5,9 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Regen Braking · Andrew Freeman</title>
   <meta name="description" content="Regenerative braking for Concordia Formula Racing: MATLAB brake blending simulation and embedded C torque arbitration.">
+  <link rel="icon" href="favicon.svg">
+  <link rel="canonical" href="https://freeman803.github.io/regen-braking.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Regen Braking · Andrew Freeman">
+  <meta property="og:description" content="Regenerative braking for Concordia Formula Racing: MATLAB brake blending simulation and embedded C torque arbitration.">
+  <meta property="og:url" content="https://freeman803.github.io/regen-braking.html">
+  <meta property="og:image" content="https://freeman803.github.io/assets/images/regenBraking.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Regen Braking · Andrew Freeman">
+  <meta name="twitter:description" content="Regenerative braking for Concordia Formula Racing: MATLAB brake blending simulation and embedded C torque arbitration.">
+  <meta name="twitter:image" content="https://freeman803.github.io/assets/images/regenBraking.png">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- ============ CANONICAL HEADER (copy to every page) ============ -->
   <header class="site-header">
     <div class="site-header__inner">
@@ -28,7 +40,7 @@
   </header>
   <!-- ============ /HEADER ============ -->
 
-  <main class="has-toc">
+  <main class="has-toc" id="main-content">
     <h1 class="page-title">Regen Braking</h1>
     <p class="page-subtitle">Brake Blending &amp; Torque Arbitration · Concordia Formula Racing</p>
 
@@ -48,8 +60,8 @@
         Developed a lap level brake blending simulation in MATLAB to model regenerative braking on CFR's electric race car, using real telemetry data exported from MoTeC. The sim ingests a logged lap CSV vehicle speed, applied motor torque, and brake line pressure  and runs a time stepped model that computes how regen torque is blended with mechanical rear braking at each instant. Dynamic weight transfer is calculated each step to determine the true rear brake demand, and regen is then constrained by six layered limits: a minimum speed cutoff, SOC hard cutoff, SOC proportional taper above 85%, peak charge current, motor shaft torque limit, and an ABS lockup guard tied to dynamic rear axle load. SOC is updated bidirectionally charging during regen events, discharging during traction using a lookup table OCV model across the 88S4P pack. Outputs include peak regen torque, energy recovered per lap, projected endurance recovery, and per constraint activation statistics, alongside time series plots of torque, SOC, and motor RPM synchronized to the lap profile.
       </p>
       <div class="image-grid image-grid--single">
-        <img src="assets/images/regenBraking.png" alt="Regen braking diagram" loading="lazy">
-        <img src="assets/images/screenshot-2026-06-22-233103_orig.png" alt="Regen braking simulation results" loading="lazy">
+        <img src="assets/images/regenBraking.png" alt="Regenerative braking system diagram" width="1622" height="883" loading="lazy">
+        <img src="assets/images/screenshot-2026-06-22-233103_orig.png" alt="Brake-blending simulation output: regen torque, SOC, and motor RPM traces over the lap" width="547" height="330" loading="lazy">
       </div>
       <a class="download" href="assets/files/brake_blending_sim.m">📄 brake_blending_sim.m</a>
       <details class="code-details">

@@ -55,41 +55,75 @@
 })();
 
 (function () {
-  var imgs = document.querySelectorAll(".image-grid img");
+  var imgs = document.querySelectorAll(".image-grid img, .figure-grid img");
   if (!imgs.length) return;
 
   var overlay = document.createElement("div");
   overlay.className = "lightbox";
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "Enlarged image");
   overlay.innerHTML =
     '<button class="lightbox__close" aria-label="Close">&times;</button>' +
     '<img class="lightbox__img" alt="">';
   document.body.appendChild(overlay);
 
   var overlayImg = overlay.querySelector(".lightbox__img");
+  var closeBtn = overlay.querySelector(".lightbox__close");
+  var lastTrigger = null;
 
-  function open(src, alt) {
-    overlayImg.src = src;
-    overlayImg.alt = alt || "";
+  function open(trigger) {
+    lastTrigger = trigger;
+    overlayImg.src = trigger.currentSrc || trigger.src;
+    overlayImg.alt = trigger.alt || "";
     overlay.classList.add("open");
     document.body.style.overflow = "hidden";
+    closeBtn.focus();
   }
 
   function close() {
     overlay.classList.remove("open");
     document.body.style.overflow = "";
     overlayImg.removeAttribute("src");
+    if (lastTrigger) {
+      lastTrigger.focus();
+      lastTrigger = null;
+    }
   }
 
+  // Make each thumbnail a keyboard-operable control
   imgs.forEach(function (img) {
+    img.setAttribute("tabindex", "0");
+    img.setAttribute("role", "button");
+    img.setAttribute(
+      "aria-label",
+      (img.alt ? img.alt + " — " : "") + "view larger"
+    );
     img.addEventListener("click", function () {
-      open(img.currentSrc || img.src, img.alt);
+      open(img);
+    });
+    img.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        e.preventDefault();
+        open(img);
+      }
     });
   });
 
-  overlay.addEventListener("click", close);
+  closeBtn.addEventListener("click", close);
+  overlay.addEventListener("click", function (e) {
+    // Click on the backdrop (not the image) closes
+    if (e.target === overlay || e.target === overlayImg) close();
+  });
+
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && overlay.classList.contains("open")) close();
+    if (!overlay.classList.contains("open")) return;
+    if (e.key === "Escape") {
+      close();
+    } else if (e.key === "Tab") {
+      // Trap focus inside the dialog (only the close button is focusable)
+      e.preventDefault();
+      closeBtn.focus();
+    }
   });
 })();
