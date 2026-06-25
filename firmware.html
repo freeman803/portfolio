@@ -48,12 +48,14 @@
       <p>
         I work across the vehicle's distributed control system (multiple microcontroller
         nodes communicating over a CAN bus in embedded C), handling messaging, sensor
-        bring-up, and integration. Source code:
-        <a href="https://github.com/concordia-fsae/firmware" target="_blank" rel="noopener">
-          github.com/concordia-fsae/firmware
-        </a>
+        bring-up, and integration.
       </p>
-      <!-- TODO (optional): a CAN bus trace or dashboard photo would add more visual evidence. -->
+      <div class="hero-actions">
+        <a class="btn btn-github" href="https://github.com/concordia-fsae/firmware" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.5.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 016 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22 0 1.6-.01 2.9-.01 3.29 0 .32.21.7.82.58A12.01 12.01 0 0024 12.5C24 5.87 18.63.5 12 .5z"/></svg>
+          View the code on GitHub
+        </a>
+      </div>
       <p>
         The car runs a distributed control architecture: separate vehicle-control,
         power-distribution, and BMS nodes each run their own embedded-C firmware and
@@ -1851,6 +1853,52 @@ const ModuleDesc_S BMS_desc = {
     .periodic1kHz_CLK  = &amp;BMS1kHz_PRD,
 };</code></pre>
       </details>
+
+      <h3>Regenerative braking torque arbitration (embedded C)</h3>
+      <p>
+        Implemented the real time regen torque arbitration function running on the rear
+        vehicle controller (VCREAR). The function reads live longitudinal deceleration and
+        rear brake line pressure over CAN, validates both signals before executing, then
+        computes the optimal regen torque demand each control cycle. Dynamic weight transfer
+        is calculated from the instantaneous deceleration, CG height, and wheelbase to
+        determine how much braking force the rear axle is actually responsible for at that
+        moment. The mechanical contribution of the rear caliper is then subtracted from that
+        demand (converting brake pressure from PSI to pascals, multiplying through caliper
+        area and rotor radius) and the remaining deficit is what regen must fill. The result
+        is referred to the motor shaft through the gear ratio and returned for downstream
+        torque limiting. If either CAN signal is stale or invalid, the function returns zero,
+        ensuring the car fails safe with no unintended regen torque applied. The full
+        development, including the MATLAB brake blending simulation it was tuned against, is
+        on the <a href="regen-braking.html">Regen Braking</a> page.
+      </p>
+      <pre class="code-block"><code>
+        static float32_t evaluate_regenTorque(void)
+{
+    float32_t  decel;
+    const bool accel_valid = (CANRX_get_signal(VEH, VCPDU_lon, &decel) == CANRX_MESSAGE_VALID);
+    float32_t  brakePressure_rear;
+    const bool brake_valid = (CANRX_get_signal(VEH, VCREAR_brakePressure, &brakePressure_rear) == CANRX_MESSAGE_VALID);
+
+    if (accel_valid && brake_valid)
+    {
+        float32_t weightTranfer           = -(decel * CG_HEIGHT * CAR_MASS) / WHEEL_BASE;
+        float32_t dynamic_rearWeight      = CAR_WEIGHT / 2 - weightTranfer; // assuming 50/50 weight front/rear
+        float32_t rearWeight_percentage   = dynamic_rearWeight / (CAR_WEIGHT);
+        float32_t total_brakeForce        = decel * CAR_MASS;
+        float32_t required_rearAxleForce  = total_brakeForce * rearWeight_percentage;
+        float32_t required_rearAxleTorque = required_rearAxleForce * (WHEEL_DIAMETER / 2);
+        brakePressure_rear = brakePressure_rear * 6895;    // converting  PSI to PA
+        float32_t brake_torque            = brakePressure_rear * REAR_CALIPER_AREA * EFFECTIVE_ROTOR_RADIUS;
+        float32_t regen_torque            = required_rearAxleTorque - brake_torque;
+        regen_torque       = regen_torque / GEAR_RATIO;
+        return regen_torque;
+    }
+    else
+    {
+        return 0;
+    }
+}
+      </code></pre>
     </section>
   </main>
 
